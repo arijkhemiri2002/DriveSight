@@ -1,0 +1,29 @@
+# ---- Données (ne jamais pousser) ----
+data/
+*.zip
+*.mp4
+*.jpg
+*.jpeg
+*.png
+*.csv
+
+# ---- Modèles et résultats d'entraînement ----
+runs/
+*.pt
+*.pth
+*.onnx
+*.engine
+
+# ---- Python ----
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# ---- IDE / système ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
