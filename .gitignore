@@ -20,7 +20,6 @@ __pycache__/
 .venv/
 venv/
 env/
-.ipynb_checkpoints/
 
 # ---- IDE / système ----
 .vscode/
