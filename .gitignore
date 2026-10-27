@@ -26,3 +26,6 @@ env/
 .idea/
 .DS_Store
 Thumbs.db
+# ---- Jupyter ----
+.ipynb_checkpoints/
+*.backup.ipynb
