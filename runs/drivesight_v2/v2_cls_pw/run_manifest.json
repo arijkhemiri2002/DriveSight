@@ -1,0 +1,22 @@
+{
+  "run_name": "v2_cls_pw",
+  "smoke_test": false,
+  "weights": "yolo11n.pt",
+  "data": "C:\\Users\\wahbi\\OneDrive\\Bureau\\DriveSight_New\\data\\bdd100k\\yolo_dataset\\data.yaml",
+  "imgsz": 1152,
+  "batch": 4,
+  "epochs": 150,
+  "patience": 30,
+  "optimizer": "AdamW",
+  "lr0": 0.001,
+  "freeze": null,
+  "cls_pw": 0.5,
+  "mixup": 0.0,
+  "device": "0",
+  "cls_remap": true,
+  "project": "C:\\Users\\wahbi\\OneDrive\\Bureau\\DriveSight_New\\runs\\drivesight_v2",
+  "wall_clock_s": 18061.330811499996,
+  "peak_gpu_mem_mb": 2097.7939453125,
+  "run_dir": "C:\\Users\\wahbi\\OneDrive\\Bureau\\DriveSight_New\\runs\\drivesight_v2\\v2_cls_pw",
+  "best_pt": "C:\\Users\\wahbi\\OneDrive\\Bureau\\DriveSight_New\\runs\\drivesight_v2\\v2_cls_pw\\weights\\best.pt"
+}
