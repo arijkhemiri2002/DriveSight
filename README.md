@@ -85,12 +85,12 @@ notebooks/drivesight_v2/   master notebook + the two data notebooks (01, 02)
 notebooks/                 07 resolution-ablation notebook, convert_to_yolo.py (V1 tooling the report cites)
 app/                       demo web app (FastAPI server + single-page interface)
 configs/                   v2_data.yaml, v2_train_recipe.yaml
+src/features/              dataset conversion & preprocessing utilities (convert_bdd100k_to_yolo.py, preprocessing.py, verification.py)
 weights/final/             the three final best.pt files; weights/*.pt pretrained starts are downloaded
-reports/                   metrics, figures and written reports behind every notebook section
+reports/                   metrics, figures and written reports behind every notebook section (local only, git-ignored)
 runs/drivesight_v2/        per-run args.yaml, results.csv (checkpoints and plots stay local)
-data/                      local only (git-ignored)
-archive/                   local only (git-ignored): the original scripts (including the notebook generator), docs,
-                           old runs and data that the notebook does not need
+data/                      local only (git-ignored): BDD100K dataset, not part of the repository
+archive/                   local only (git-ignored): original scripts, docs, old runs and data not needed by the notebook
 ```
 
 ## Installation and execution
