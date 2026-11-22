@@ -1,0 +1,20 @@
+# DriveSight V2 dataset definition (nine classes). Reference copy for documentation / portability.
+# The notebook and the app read the machine-specific original at data/bdd100k/yolo_dataset/data.yaml
+# (its `path:` is absolute and was created by the preprocessing notebook 02). To use this copy,
+# set `path:` to the absolute location of data/bdd100k/yolo_dataset on your machine.
+# Splits: train 2,744 / val 686 / test 830 images. The test split is protected (final one-shot use only).
+path: ./data/bdd100k/yolo_dataset
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: pedestrian
+  1: rider
+  2: car
+  3: truck
+  4: bus
+  5: motorcycle
+  6: bicycle
+  7: traffic light
+  8: traffic sign
+vru4: [pedestrian, rider, motorcycle, bicycle]

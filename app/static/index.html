@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DriveSight</title>
+<style>
+:root{
+  --bg:#070b14; --bg2:#0d1424; --card:#111a2e; --line:#1f2c47; --text:#e8eefc; --mute:#8a9bbd;
+  --accent:#2ee6a6; --warn:#ff9f43; --danger:#ff5d73;
+  --d1:#0e1830; --d2:#0a1224; --dline:#2c3f66; --road:#0b1428;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){--bg:#f3f6fc;--bg2:#e7edf8;--card:#ffffff;--line:#d5deef;--text:#0e1a33;--mute:#5a6b8c;
+    --d1:#ffffff;--d2:#e9f0fb;--dline:#b9c8e6;--road:#dbe6f6}
+}
+:root[data-theme="light"]{--bg:#f3f6fc;--bg2:#e7edf8;--card:#ffffff;--line:#d5deef;--text:#0e1a33;--mute:#5a6b8c;
+  --d1:#ffffff;--d2:#e9f0fb;--dline:#b9c8e6;--road:#dbe6f6}
+*{box-sizing:border-box;margin:0}
+html,body{min-height:100%}
+body{font-family:Inter,"Segoe UI",system-ui,sans-serif;background:radial-gradient(1200px 600px at 70% -10%,var(--bg2),var(--bg));
+  color:var(--text);padding:22px 16px 40px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--accent),#4cc9f0);display:grid;place-items:center;
+  box-shadow:0 6px 24px #2ee6a644}
+.logo svg{width:22px;height:22px}
+h1{font-size:21px;letter-spacing:.2px}
+h1 small{display:block;font-size:12px;font-weight:500;color:var(--mute);letter-spacing:.3px;margin-top:2px}
+.pill{font-size:12px;color:var(--mute);border:1px solid var(--line);border-radius:99px;padding:6px 12px;background:var(--card);cursor:pointer}
+.pill b{color:var(--accent)}
+.seg{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;gap:2px}
+.seg button{border:0;background:transparent;color:var(--mute);padding:8px 14px;border-radius:9px;font:600 13px inherit;cursor:pointer;transition:.18s}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:linear-gradient(135deg,var(--accent),#4cc9f0);color:#04121c}
+.hint{font-size:12px;color:var(--mute);margin:8px 2px 0}
+
+/* ---------- drop zone ---------- */
+#drop{position:relative;border-radius:22px;min-height:440px;display:grid;place-items:center;text-align:center;cursor:pointer;overflow:hidden;
+  background:linear-gradient(180deg,var(--d1),var(--d2));border:1.5px dashed var(--dline);transition:.25s}
+#drop:hover,#drop.over{border-color:var(--accent);box-shadow:0 0 0 6px #2ee6a61a,0 20px 60px #2ee6a61f;transform:translateY(-2px)}
+.road{position:absolute;left:0;right:0;bottom:0;height:120px;opacity:.9;
+  background:linear-gradient(180deg,transparent,var(--road) 60%)}
+.lane{position:absolute;left:-10%;right:-10%;bottom:46px;height:5px;
+  background:repeating-linear-gradient(90deg,#2ee6a6 0 46px,transparent 46px 96px);animation:go 1.1s linear infinite;opacity:.65;border-radius:4px}
+@keyframes go{to{background-position:96px 0}}
+.dropin{position:relative;z-index:2;padding:30px 20px 90px}
+.drop-ic{width:78px;height:78px;margin:0 auto 18px;border-radius:24px;display:grid;place-items:center;
+  background:linear-gradient(135deg,#2ee6a622,#4cc9f022);border:1px solid #2ee6a655;animation:float 3.2s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-8px)}}
+.dropin h2{font-size:26px;margin-bottom:8px}
+.dropin p{color:var(--mute);font-size:14.5px;line-height:1.55}
+.dropin kbd{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:12px}
+.btnrow{display:flex;gap:10px;justify-content:center;margin-top:20px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:11px;padding:10px 16px;font:600 13px inherit;cursor:pointer;transition:.18s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),#4cc9f0);color:#04121c;border:0}
+.btn.primary:hover{filter:brightness(1.08);color:#04121c}
+input[type=file]{display:none}
+
+/* ---------- result ---------- */
+#result{display:none;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+@media (max-width:960px){#result{grid-template-columns:1fr}}
+.stage{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:12px}
+.canvaswrap{position:relative;border-radius:14px;overflow:hidden;background:#000;line-height:0;user-select:none;touch-action:none}
+.canvaswrap img,.canvaswrap canvas{width:100%;height:auto;display:block}
+#ov{position:absolute;inset:0}
+#handle{position:absolute;top:0;bottom:0;width:3px;background:#fff;box-shadow:0 0 14px #000a;cursor:ew-resize;display:none;transform:translateX(-1.5px)}
+#handle::after{content:"\2194";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;
+  background:#fff;color:#111;display:grid;place-items:center;font:700 16px inherit;box-shadow:0 4px 16px #0008}
+.scan{position:absolute;inset:0;pointer-events:none;display:none;overflow:hidden}
+.scan::after{content:"";position:absolute;left:0;right:0;height:90px;top:-90px;
+  background:linear-gradient(180deg,transparent,#2ee6a666,transparent);border-bottom:2px solid #2ee6a6;animation:scan 1.3s ease-in-out infinite}
+@keyframes scan{to{top:100%}}
+.scan.on{display:block;background:#04121c66}
+.bar{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 4px 2px;flex-wrap:wrap}
+.meta{font-size:12.5px;color:var(--mute)}
+.meta b{color:var(--text)}
+.panel{display:flex;flex-direction:column;gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px}
+.card h3{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--mute);margin-bottom:12px;font-weight:700}
+#alert{border-radius:18px;padding:16px 18px;border:1px solid var(--line);background:var(--card)}
+#alert.vru{background:linear-gradient(135deg,#ff5d7322,#ff9f4322);border-color:#ff5d7366}
+#alert.clear{background:linear-gradient(135deg,#2ee6a622,#4cc9f022);border-color:#2ee6a655}
+#alert .big{font-size:34px;font-weight:800;line-height:1}
+#alert .sub{font-size:13px;color:var(--mute);margin-top:6px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:99px;padding:6px 11px 6px 8px;font:600 12.5px inherit;
+  background:transparent;color:var(--text);cursor:pointer;transition:.15s}
+.chip i{width:11px;height:11px;border-radius:50%;display:inline-block}
+.chip em{font-style:normal;color:var(--mute);font-weight:600}
+.chip.off{opacity:.35}
+.chip.vru{border-color:#ff9f4399}
+.slider{width:100%;accent-color:var(--accent)}
+.row{display:flex;justify-content:space-between;font-size:13px;color:var(--mute);margin-bottom:8px}
+.row b{color:var(--text)}
+.list{max-height:230px;overflow:auto;display:flex;flex-direction:column;gap:4px}
+.item{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:9px;font-size:13px;cursor:default;transition:.12s}
+.item:hover,.item.hl{background:#ffffff12}
+.item i{width:10px;height:10px;border-radius:3px}
+.item span{margin-left:auto;color:var(--mute);font-variant-numeric:tabular-nums}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(30px);background:#ff5d73;color:#fff;padding:12px 18px;border-radius:12px;
+  font-weight:600;font-size:14px;opacity:0;pointer-events:none;transition:.3s;z-index:9}
+.toast.on{opacity:1;transform:translateX(-50%)}
+footer{margin-top:26px;text-align:center;color:var(--mute);font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#04121c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.6-6.5 9-6.5S21 12 21 12s-3.6 6.5-9 6.5S3 12 3 12z"/><circle cx="12" cy="12" r="2.6"/></svg></div>
+      <h1>DriveSight<small>See the road, protect the vulnerable.</small></h1>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="seg" id="models" role="group" aria-label="Model"></div>
+      <span class="pill" id="theme" title="Switch theme">Theme</span>
+      <span class="pill" id="dev">Device: <b>-</b></span>
+    </div>
+  </header>
+
+  <div id="drop" tabindex="0" role="button" aria-label="Upload a road photo">
+    <div class="road"><div class="lane"></div></div>
+    <div class="dropin">
+      <div class="drop-ic"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#2ee6a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0l-4 4m4-4l4 4"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg></div>
+      <h2>Drop a road photo here</h2>
+      <p>or click to browse, or paste with <kbd>Ctrl</kbd> + <kbd>V</kbd><br>JPG, PNG or WebP, up to 15 MB. Your image stays on this computer.</p>
+      <div class="btnrow"><button class="btn primary" id="pick" type="button">Choose a photo</button></div>
+      <p class="hint" id="modelhint"></p>
+    </div>
+    <input type="file" id="file" accept="image/*">
+  </div>
+
+  <div id="result">
+    <div class="stage">
+      <div class="canvaswrap" id="cw">
+        <img id="img" alt="Uploaded road scene">
+        <canvas id="ov"></canvas>
+        <div id="handle"></div>
+        <div class="scan" id="scan"></div>
+      </div>
+      <div class="bar">
+        <div class="meta" id="meta"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" id="cmp" type="button">Compare with original</button>
+          <button class="btn" id="dl" type="button">Download</button>
+          <button class="btn primary" id="again" type="button">New photo</button>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <div id="alert"><div class="big" id="abig">-</div><div class="sub" id="asub"></div></div>
+      <div class="card">
+        <h3>Confidence</h3>
+        <div class="row" title="Pedestrian, rider, motorcycle, bicycle: a miss costs more than a false alarm"><span>Vulnerable road users</span><b id="cvv">15%</b></div>
+        <input class="slider" id="confv" type="range" min="5" max="95" value="15" aria-label="Confidence threshold for vulnerable road users">
+        <div class="row" style="margin-top:14px" title="Car, truck, bus, traffic light, traffic sign: the project reference value, 25%"><span>Other objects</span><b id="cvo">25%</b></div>
+        <input class="slider" id="confo" type="range" min="5" max="95" value="25" aria-label="Confidence threshold for other objects">
+        <p class="hint">Vulnerable road users (pedestrian, rider, motorcycle, bicycle) get a lower default so fewer are missed, at the cost of
+          more false alarms; expect extra pedestrian alerts and some riders labelled as pedestrians. These are demo settings, not an
+          evaluated profile for this model. Below 5% nothing is returned.</p>
+      </div>
+      <div class="card"><h3>Classes</h3><div class="chips" id="chips"></div></div>
+      <div class="card"><h3>Detections</h3><div class="list" id="list"></div></div>
+    </div>
+  </div>
+  <footer>YOLOv8s trained on BDD100K (V2). A research demo, not a safety system.<br>Confidence: the model runs once; the sliders only choose which detections to show.</footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const COLORS = {pedestrian:"#ff5d73", rider:"#ff9f43", motorcycle:"#feca57", bicycle:"#ff6bcb",
+  car:"#4cc9f0", truck:"#4895ef", bus:"#7b6cf6", "traffic light":"#2ee6a6", "traffic sign":"#a0e86f"};
+const VRU = new Set(["pedestrian","rider","motorcycle","bicycle"]);
+let state = {model:"yolov8s", data:null, confV:.15, confO:.25, hidden:new Set(), hl:-1, split:1, compare:false, url:null};
+
+/* ---------- theme ---------- */
+const root = document.documentElement;
+try{const t=localStorage.getItem("ds-theme"); if(t) root.dataset.theme=t;}catch(e){}
+$("#theme").onclick = () => {
+  const dark = root.dataset.theme ? root.dataset.theme==="dark" : !matchMedia("(prefers-color-scheme: light)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  try{localStorage.setItem("ds-theme", root.dataset.theme);}catch(e){}
+};
+
+/* ---------- models ---------- */
+fetch("/api/models").then(r=>r.json()).then(m=>{
+  $("#dev b").textContent = m.device; state.model = m.default;
+  const box = $("#models");
+  m.models.filter(x=>x.available).forEach(x=>{
+    const b = document.createElement("button"); b.textContent = x.label; b.dataset.k = x.key; b.title = x.note;
+    b.onclick = () => { state.model = x.key; mark(); if(state.file) run(state.file); };
+    box.appendChild(b);
+  });
+  window._models = m.models;
+  function mark(){
+    box.querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.k===state.model));
+    const cur = m.models.find(x=>x.key===state.model); $("#modelhint").textContent = cur ? cur.label + ": " + cur.note : "";
+  }
+  window._mark = mark; mark();
+}).catch(()=>toast("Cannot reach the DriveSight server"));
+
+/* ---------- upload ---------- */
+const drop = $("#drop"), fileIn = $("#file");
+drop.onclick = e => { if(e.target.id!=="pick") fileIn.click(); };
+$("#pick").onclick = () => fileIn.click();
+drop.onkeydown = e => { if(e.key==="Enter"||e.key===" ") fileIn.click(); };
+fileIn.onchange = () => fileIn.files[0] && run(fileIn.files[0]);
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop", e => { const f=e.dataTransfer.files[0]; f && run(f); });
+window.addEventListener("dragover", e=>e.preventDefault());
+window.addEventListener("drop", e=>{ e.preventDefault(); const f=e.dataTransfer.files[0]; if(f && !drop.contains(e.target)) run(f); });
+window.addEventListener("paste", e => { for(const it of e.clipboardData.items) if(it.type.startsWith("image/")) { run(it.getAsFile()); break; } });
+
+async function run(file){
+  if(!file.type.startsWith("image/")) return toast("Please choose an image file");
+  state.file = file;
+  if(state.url) URL.revokeObjectURL(state.url);
+  state.url = URL.createObjectURL(file);
+  $("#img").src = state.url;
+  drop.style.display = "none"; $("#result").style.display = "grid";
+  $("#scan").classList.add("on"); state.data = null; state.compare = false; $("#cmp").textContent = "Compare with original"; $("#handle").style.display="none"; clearOv();
+  $("#abig").textContent = "Analysing..."; $("#asub").textContent = "Running " + (state.model||"") + " on your photo";
+  const fd = new FormData(); fd.append("file", file); fd.append("model", state.model);
+  try{
+    const r = await fetch("/api/detect", {method:"POST", body:fd});
+    if(!r.ok){ const j = await r.json().catch(()=>({})); throw new Error(j.detail || "detection failed"); }
+    state.data = await r.json();
+    await $("#img").decode().catch(()=>{});
+    state.hidden.clear(); state.hl=-1; render(true);
+  }catch(err){ toast(err.message); reset(); }
+  finally{ $("#scan").classList.remove("on"); }
+}
+
+/* ---------- rendering ---------- */
+const ov = $("#ov"), ctx = ov.getContext("2d");
+function clearOv(){ ctx.clearRect(0,0,ov.width,ov.height); }
+const thr = name => VRU.has(name) ? state.confV : state.confO;
+function visible(){ return state.data.detections.map((d,i)=>({...d,i})).filter(d=>d.conf>=thr(d.name) && !state.hidden.has(d.name)); }
+let t0 = 0;
+function render(animate){
+  if(!state.data) return;
+  const W = state.data.width, H = state.data.height; ov.width = W; ov.height = H;
+  const dets = visible(), lw = Math.max(2, Math.round(Math.max(W,H)/420)), fs = Math.max(13, Math.round(Math.max(W,H)/70));
+  const draw = (prog) => {
+    ctx.clearRect(0,0,W,H);
+    dets.forEach((d,k)=>{
+      const p = animate ? Math.min(1, Math.max(0, prog*dets.length/ (k+1) - .0)) : 1;
+      const a = animate ? Math.min(1, Math.max(0, prog*1.6 - k/Math.max(dets.length,1)*.6)) : 1;
+      if(a<=0) return;
+      const [x1,y1,x2,y2] = d.box, x = x1*W, y = y1*H, w = (x2-x1)*W, h = (y2-y1)*H, c = COLORS[d.name]||"#fff";
+      const hl = state.hl===d.i, vru = VRU.has(d.name);
+      ctx.globalAlpha = (state.hl>=0 && !hl) ? .35*a : a;
+      ctx.lineWidth = hl ? lw*2 : lw; ctx.strokeStyle = c; ctx.fillStyle = c + (hl?"44":"1c");
+      if(vru){ ctx.shadowColor = c; ctx.shadowBlur = lw*5; }
+      ctx.beginPath(); ctx.roundRect(x,y,w,h,Math.min(10,lw*3)); ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+      const tag = d.name + " " + Math.round(d.conf*100) + "%";
+      ctx.font = "700 "+fs+"px Inter,Segoe UI,sans-serif"; const tw = ctx.measureText(tag).width+fs*.9, th = fs*1.55;
+      const ty = y - th < 0 ? y : y - th;
+      ctx.fillStyle = c; ctx.beginPath(); ctx.roundRect(x, ty, tw, th, 6); ctx.fill();
+      ctx.fillStyle = "#04121c"; ctx.textBaseline = "middle"; ctx.fillText(tag, x+fs*.45, ty+th/2+1);
+    });
+    ctx.globalAlpha = 1;
+  };
+  if(animate){ const start = performance.now(); const step = now => { const p = Math.min(1,(now-start)/650); draw(p); if(p<1) requestAnimationFrame(step); }; requestAnimationFrame(step); }
+  else draw(1);
+  applySplit(); panel(dets);
+}
+function panel(dets){
+  const all = state.data.detections.filter(d=>d.conf>=thr(d.name));
+  const vru = dets.filter(d=>VRU.has(d.name));
+  const al = $("#alert"); al.className = vru.length ? "vru" : "clear";
+  if(vru.length){
+    const n = {}; vru.forEach(d=>n[d.name]=(n[d.name]||0)+1);
+    $("#abig").textContent = vru.length + " vulnerable road user" + (vru.length>1?"s":"");
+    $("#asub").textContent = Object.entries(n).map(([k,v])=>v+" "+k+(v>1?"s":"")).join(", ") + " detected";
+  }else{
+    $("#abig").textContent = dets.length ? "No vulnerable road users" : "Nothing detected";
+    $("#asub").textContent = dets.length ? dets.length + " object" + (dets.length>1?"s":"") + " found (vehicles, signs)" : "Try lowering the confidence sliders";
+  }
+  const cnt = {}; all.forEach(d=>cnt[d.name]=(cnt[d.name]||0)+1);
+  $("#chips").innerHTML = ""; Object.keys(COLORS).filter(k=>cnt[k]).forEach(k=>{
+    const b = document.createElement("button"); b.className = "chip"+(VRU.has(k)?" vru":"")+(state.hidden.has(k)?" off":"");
+    b.innerHTML = `<i style="background:${COLORS[k]}"></i>${k} <em>${cnt[k]}</em>`;
+    b.onclick = () => { state.hidden.has(k) ? state.hidden.delete(k) : state.hidden.add(k); render(false); };
+    $("#chips").appendChild(b);
+  });
+  $("#list").innerHTML = "";
+  dets.forEach(d=>{
+    const el = document.createElement("div"); el.className = "item"+(state.hl===d.i?" hl":"");
+    el.innerHTML = `<i style="background:${COLORS[d.name]}"></i>${d.name}<span>${Math.round(d.conf*100)}%</span>`;
+    el.onmouseenter = () => { state.hl = d.i; render(false); }; el.onmouseleave = () => { state.hl = -1; render(false); };
+    $("#list").appendChild(el);
+  });
+  $("#meta").innerHTML = `<b>${state.data.model}</b> &middot; ${state.data.ms.toFixed(0)} ms &middot; ${state.data.width}&times;${state.data.height}`;
+}
+$("#confv").oninput = e => { state.confV = e.target.value/100; $("#cvv").textContent = e.target.value+"%"; render(false); };
+$("#confo").oninput = e => { state.confO = e.target.value/100; $("#cvo").textContent = e.target.value+"%"; render(false); };
+
+/* ---------- compare slider ---------- */
+function applySplit(){
+  ov.style.clipPath = state.compare ? `inset(0 0 0 ${state.split*100}%)` : "none";
+  $("#handle").style.display = state.compare ? "block" : "none";
+  $("#handle").style.left = state.split*100+"%";
+}
+$("#cmp").onclick = () => { state.compare = !state.compare; state.split = .5; $("#cmp").textContent = state.compare ? "Hide comparison" : "Compare with original"; applySplit(); };
+const cw = $("#cw"); let drag = false;
+const move = e => { const r = cw.getBoundingClientRect(); state.split = Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)); applySplit(); };
+$("#handle").addEventListener("pointerdown", e=>{drag=true; e.target.setPointerCapture(e.pointerId);});
+window.addEventListener("pointermove", e=>{ if(drag) move(e); }); window.addEventListener("pointerup", ()=>drag=false);
+
+/* ---------- actions ---------- */
+$("#dl").onclick = () => {
+  const c = document.createElement("canvas"), im = $("#img"); c.width = state.data.width; c.height = state.data.height;
+  const x = c.getContext("2d"); x.drawImage(im,0,0,c.width,c.height); x.drawImage(ov,0,0);
+  const a = document.createElement("a"); a.download = "drivesight_result.png"; a.href = c.toDataURL("image/png"); a.click();
+};
+function reset(){ $("#result").style.display = "none"; drop.style.display = "grid"; fileIn.value = ""; state.file = null; }
+$("#again").onclick = reset;
+let tt; function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove("on"),3800); }
+</script>
+</body>
+</html>

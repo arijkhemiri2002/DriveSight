@@ -1,0 +1,28 @@
+# V2 training recipe shared by YOLO11n (v2_cls_pw025), YOLOv8s and YOLO11s.
+# Verified: the saved args.yaml of the three runs differ only in model / name / resume / save_dir.
+# Reproduce: set RUN_THREE_MODEL_TRAINING = True in the notebook (Section 17.5); it calls train_v2_experiment(name, cls_pw=0.25,
+# weights, workers=0) with this recipe. (The original CLI script is kept in archive/scripts/drivesight_v2/train_v2.py.)
+imgsz: 1152
+batch: 4
+epochs: 150
+patience: 30
+optimizer: AdamW
+lr0: 0.001
+lrf: 0.01
+momentum: 0.937
+weight_decay: 0.0005
+warmup_epochs: 3.0
+cos_lr: false
+close_mosaic: 10
+amp: true
+seed: 0
+deterministic: true
+workers: 0
+cls_pw: 0.25      # class-weight exponent (inverse-frequency^0.25), with cls_remap: true
+mixup: 0.0
+mosaic: 1.0
+nms_iou: 0.70     # evaluation / inference NMS
+runs:
+  YOLO11n: {pretrained: weights/yolo11n.pt, run: runs/drivesight_v2/v2_cls_pw025}
+  YOLOv8s: {pretrained: weights/yolov8s.pt, run: runs/drivesight_v2/v2_yolov8s_cls_pw025}
+  YOLO11s: {pretrained: weights/yolo11s.pt, run: runs/drivesight_v2/v2_yolo11s_cls_pw025}

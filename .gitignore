@@ -1,31 +1,54 @@
-# ---- Données (ne jamais pousser) ----
-data/
-*.zip
-*.mp4
-*.jpg
-*.jpeg
-*.png
-*.csv
+# ---- Local-only folders --------------------------------------------------------
+/data/
+/archive/
+/reports/
 
-# ---- Modèles et résultats d'entraînement ----
-runs/
-*.pt
-*.pth
-*.onnx
-*.engine
-
-# ---- Python ----
+# ---- Python / environments -----------------------------------------------------
 __pycache__/
 *.pyc
+.ipynb_checkpoints/
 .venv/
 venv/
 env/
+.env
+*.env
 
-# ---- IDE / système ----
+# ---- Editor / assistant / OS ---------------------------------------------------
+.claude/
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
-# ---- Jupyter ----
-.ipynb_checkpoints/
-*.backup.ipynb
+*.tmp
+_tmp_*
+
+# ---- Secrets -------------------------------------------------------------------
+*.pem
+*.key
+credentials*.json
+secrets*
+
+# ---- Weights: ignore everything except the three final models and configs ----------
+*.pt
+*.onnx
+*.engine
+!weights/final/*.pt
+# pretrained starting weights are downloaded by Ultralytics (weights/yolov8s.pt, yolo11s.pt, yolo11n.pt)
+
+# ---- Training outputs: keep the small recorded evidence only -------------------------
+runs/**
+!runs/
+!runs/drivesight_v2/
+runs/drivesight_v2/**
+!runs/drivesight_v2/*/
+runs/drivesight_v2/*/**
+!runs/drivesight_v2/*/args.yaml
+!runs/drivesight_v2/*/results.csv
+!runs/drivesight_v2/*/run_manifest.json
+*.cache
+*.log
+
+# ---- Large regenerated evaluation caches ---------------------------------------------
+predictions*.json
+predictions_*.pkl
+*.pkl
