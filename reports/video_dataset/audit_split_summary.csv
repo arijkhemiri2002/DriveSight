@@ -1,0 +1,4 @@
+split,sequences,complete,sync_ok
+test,306,303,266
+training,926,926,800
+validation,203,200,95
