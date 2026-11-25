@@ -1,7 +1,8 @@
-# ---- Local-only folders --------------------------------------------------------
+﻿# ---- Local-only folders --------------------------------------------------------
 /data/
 /archive/
-/reports/
+/reports/*
+!/reports/video_dataset/
 
 # ---- Python / environments -----------------------------------------------------
 __pycache__/
@@ -52,3 +53,4 @@ runs/drivesight_v2/*/**
 predictions*.json
 predictions_*.pkl
 *.pkl
+.pytest_cache/
