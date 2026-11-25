@@ -6,6 +6,7 @@ then open http://127.0.0.1:8000
 
 Images are processed in memory and never written to disk. The server only listens on 127.0.0.1.
 Models are the three final V2 checkpoints in weights/final/ (loaded lazily, one inference at a time).
+Video risk page: http://127.0.0.1:8000/video (per-frame risk timeline, see app/risk_engine.py).
 """
 import io
 import os
@@ -97,12 +98,131 @@ async def detect(file: UploadFile = File(...), model: str = Form(DEFAULT_MODEL))
         dets.append({"cls": c, "name": CLASS_NAMES[c], "conf": round(float(b.conf[0]), 4),
                      "box": [round(x1 / w, 5), round(y1 / h, 5), round(x2 / w, 5), round(y2 / h, 5)]})
     dets.sort(key=lambda d: -d["conf"])
-    return {"model": MODELS[model][0], "width": w, "height": h, "ms": round(ms, 1), "detections": dets}
+    danger = None
+    try:                                          # instant danger index from the risk stage's object features
+        import pandas as pd
+        from app import risk_engine
+        df = pd.DataFrame([{"cls": d["name"], "conf": d["conf"], "x1": d["box"][0] * w, "y1": d["box"][1] * h,
+                            "x2": d["box"][2] * w, "y2": d["box"][3] * h} for d in dets],
+                          columns=["cls", "conf", "x1", "y1", "x2", "y2"])
+        danger = risk_engine.snapshot(df, w, h)
+    except Exception:
+        danger = None
+    return {"model": MODELS[model][0], "width": w, "height": h, "ms": round(ms, 1), "detections": dets, "danger": danger}
+
+
+MAX_VIDEO_BYTES, MAX_VIDEO_SEC = 300 * 1024 * 1024, 60
+_VIDEO_EXT = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
+
+
+@app.get("/api/risk/info")
+def risk_info():
+    from app import risk_engine
+    return risk_engine.method_info()
+
+
+@app.post("/api/risk")
+async def risk(file: UploadFile = File(...), model: str = Form(DEFAULT_MODEL), speed: float = Form(30.0)):
+    """Video -> per-frame detections and risk score (see app/risk_engine.py). The video is written to a temporary
+    file only so OpenCV can decode it, and deleted as soon as the analysis ends."""
+    import tempfile
+    from app import risk_engine
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in _VIDEO_EXT:
+        raise HTTPException(400, "unsupported file: use an MP4, MOV, AVI, MKV or WebM video")
+    if not 0 <= speed <= 200:
+        raise HTTPException(400, "speed must be between 0 and 200 km/h")
+    fd, tmp = tempfile.mkstemp(suffix=ext, prefix="drivesight_")
+    try:
+        size = 0
+        with os.fdopen(fd, "wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_VIDEO_BYTES:
+                    raise HTTPException(413, "video too large (300 MB max)")
+                out.write(chunk)
+        with _lock:                               # one analysis at a time on the 4 GB GPU
+            net = _model(model)
+            t0 = time.perf_counter()
+            try:
+                res = risk_engine.analyse(net, tmp, device=_device(), imgsz=IMGSZ, iou=NMS_IOU, min_conf=MIN_CONF,
+                                          class_names=CLASS_NAMES, speed_kmh=speed, max_sec=MAX_VIDEO_SEC)
+            except OverflowError as e:
+                raise HTTPException(413, str(e))
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+            res["ms"] = round((time.perf_counter() - t0) * 1000, 1)
+        res["model"] = MODELS[model][0]
+        return res
+    finally:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+@app.post("/api/risk/stream")
+async def risk_stream(file: UploadFile = File(...), model: str = Form(DEFAULT_MODEL), speed: float = Form(30.0)):
+    """Same analysis as /api/risk, streamed as newline-delimited JSON: progress events, then {"result": ...}
+    (or {"error": ...}). Lets the page show real progress. The temporary video file is deleted when the stream ends."""
+    import json
+    import tempfile
+    from fastapi.responses import StreamingResponse
+    from app import risk_engine
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in _VIDEO_EXT:
+        raise HTTPException(400, "unsupported file: use an MP4, MOV, AVI, MKV or WebM video")
+    if not 0 <= speed <= 200:
+        raise HTTPException(400, "speed must be between 0 and 200 km/h")
+    fd, tmp = tempfile.mkstemp(suffix=ext, prefix="drivesight_")
+    try:
+        size = 0
+        with os.fdopen(fd, "wb") as out:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_VIDEO_BYTES:
+                    raise HTTPException(413, "video too large (300 MB max)")
+                out.write(chunk)
+    except BaseException:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+
+    def events():
+        try:
+            yield json.dumps({"stage": "load", "done": 0, "total": 1}) + "\n"
+            with _lock:                           # one analysis at a time on the 4 GB GPU
+                net = _model(model)
+                t0 = time.perf_counter()
+                for ev in risk_engine.analyse_steps(net, tmp, device=_device(), imgsz=IMGSZ, iou=NMS_IOU,
+                                                    min_conf=MIN_CONF, class_names=CLASS_NAMES, speed_kmh=speed,
+                                                    max_sec=MAX_VIDEO_SEC):
+                    if "result" in ev:
+                        ev["result"].update(ms=round((time.perf_counter() - t0) * 1000, 1), model=MODELS[model][0])
+                    yield json.dumps(ev) + "\n"
+        except (ValueError, OverflowError) as e:
+            yield json.dumps({"error": str(e)}) + "\n"
+        except HTTPException as e:
+            yield json.dumps({"error": e.detail}) + "\n"
+        finally:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+    return StreamingResponse(events(), media_type="application/x-ndjson")
 
 
 @app.get("/")
 def index():
     return FileResponse(STATIC / "index.html")
+
+
+@app.get("/video")
+def video_page():
+    return FileResponse(STATIC / "video.html")
 
 
 app.mount("/static", StaticFiles(directory=STATIC), name="static")

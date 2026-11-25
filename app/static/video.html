@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DriveSight - video risk</title>
+<link rel="stylesheet" href="/static/cockpit.css">
+<style>
+/* states: s-empty (upload), s-busy (analysing), s-result */
+.app:not(.s-result) .hud,.app:not(.s-result) .dock,.app:not(.s-result) .bigplay{display:none}
+.app.s-result .hero{display:none}
+.media{cursor:pointer}
+.app:not(.s-result) .media{cursor:default}
+
+/* busy: blurred preview behind the card */
+#preview{position:absolute;inset:-40px;width:calc(100% + 80px);height:calc(100% + 80px);object-fit:cover;filter:blur(26px) brightness(.45) saturate(130%);opacity:0;transition:opacity .6s}
+.app.s-busy #preview{opacity:1}
+.app.s-busy .hero{cursor:default}
+.app.s-busy .hero::before{animation-duration:.9s}
+#busy{display:none;text-align:left}
+.app.s-busy #idle{display:none}
+.app.s-busy #busy{display:block}
+#busy h2{font-size:21px;margin-bottom:4px;word-break:break-word}
+#busy .sub{color:var(--mute);font-size:13px;margin-bottom:22px}
+.steps{list-style:none;padding:0;display:flex;flex-direction:column;gap:13px;margin-bottom:22px}
+.steps li{display:flex;align-items:center;gap:12px;color:var(--dim);font-size:14px}
+.steps li i{width:22px;height:22px;border-radius:50%;border:2px solid var(--edge2);display:grid;place-items:center;flex:none;font-style:normal}
+.steps li.now{color:var(--text)}
+.steps li.now i{border-color:var(--accent);border-top-color:transparent;animation:spin .8s linear infinite}
+.steps li.ok{color:var(--text)}
+.steps li.ok i{background:var(--accent);border-color:var(--accent)}
+.steps li.ok i::after{content:"";width:8px;height:4px;border-left:2px solid var(--ink);border-bottom:2px solid var(--ink);transform:rotate(-45deg) translate(1px,-1px)}
+.steps li span{margin-left:auto;font-size:12.5px;color:var(--mute)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pbar{height:6px;border-radius:9px;background:rgba(255,255,255,.08);overflow:hidden}
+.pbar b{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:9px;transition:width .25s;box-shadow:0 0 14px rgba(var(--accent-rgb),.7)}
+.eta{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mute);margin-top:9px}
+
+/* on the video */
+.bigplay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:76px;height:76px;border-radius:50%;cursor:pointer;z-index:2;
+  display:grid;place-items:center;transition:opacity .2s,transform .2s}
+.bigplay svg{width:30px;height:30px;margin-left:4px}
+.app.playing .bigplay{opacity:0;pointer-events:none;transform:translate(-50%,-50%) scale(.85)}
+.banner{position:absolute;left:50%;top:calc(var(--gap) + 58px + 22px);transform:translate(-50%,-8px);z-index:3;opacity:0;transition:.25s;pointer-events:none;
+  display:flex;align-items:center;gap:10px;padding:10px 18px 10px 14px;border-radius:99px;background:rgba(255,77,106,.92);color:#fff;font-weight:700;font-size:15px;
+  box-shadow:0 10px 40px rgba(255,77,106,.45)}
+.banner.on{opacity:1;transform:translate(-50%,0)}
+.banner i{width:10px;height:10px;border-radius:50%;background:#fff;animation:pulse 1s ease-in-out infinite}
+@keyframes pulse{50%{opacity:.35}}
+
+/* gauge panel */
+.gauge{display:flex;align-items:center;gap:14px}
+.gauge svg{width:128px;height:104px;flex:none}
+.gnum{font-size:27px;font-weight:750;fill:var(--text)}
+.glabel{font-size:20px;white-space:nowrap;font-weight:750;line-height:1.15;letter-spacing:-.2px}
+#now.hi .glabel{color:var(--danger)} #now.mid .glabel{color:var(--warn)} #now.lo .glabel{color:var(--ok)}
+.gsub{font-size:12.5px;color:var(--mute);margin-top:5px}
+#now{transition:border-color .3s,box-shadow .3s}
+#now.hi{border-color:rgba(255,77,106,.6);box-shadow:0 18px 50px rgba(0,0,0,.38),0 0 40px rgba(255,77,106,.25)}
+.why{list-style:none;padding:0;margin-top:12px;display:flex;flex-direction:column;gap:7px}
+.why li{display:flex;align-items:center;gap:9px;font-size:13px}
+.why li::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--warn);flex:none;box-shadow:0 0 8px currentColor}
+#now.hi .why li::before{background:var(--danger)}
+.why li.calm{color:var(--mute)} .why li.calm::before{background:var(--ok)}
+
+/* drive tab */
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat{background:rgba(255,255,255,.05);border:1px solid var(--edge);border-radius:var(--r-sm);padding:10px 12px;text-align:left}
+button.stat{cursor:pointer} button.stat:hover{border-color:var(--accent)}
+.stat b{display:block;font-size:21px;font-weight:750}
+.stat span{font-size:12px;color:var(--mute)}
+.list{display:flex;flex-direction:column;gap:3px;margin-top:12px}
+.ev{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:11px;font-size:13px;cursor:pointer;border:1px solid transparent;background:transparent;text-align:left;width:100%}
+.ev:hover,.ev.cur{background:rgba(255,77,106,.12);border-color:rgba(255,77,106,.3)}
+.ev i{width:8px;height:8px;border-radius:50%;background:var(--danger);flex:none;box-shadow:0 0 8px var(--danger)}
+.ev span{margin-left:auto;color:var(--mute)}
+.empty{font-size:13px;color:var(--mute);line-height:1.5;padding:4px 2px}
+.kbd{font-size:11.5px;color:var(--mute);line-height:2}
+
+/* dock */
+.controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.time{font-size:13px;color:var(--mute);min-width:110px;margin-left:4px}
+.time b{color:var(--text);font-size:15px}
+.grow{flex:1}
+.seg.sm button{padding:6px 10px;font-size:12px}
+#tl{width:100%;height:112px;display:block;touch-action:none;cursor:pointer}
+.tlwrap{position:relative}
+#tip{position:absolute;pointer-events:none;background:rgba(238,243,255,.96);color:#0a1020;border-radius:10px;padding:7px 10px;font-size:12px;line-height:1.4;
+  white-space:nowrap;transform:translate(-50%,-110%);display:none;box-shadow:0 10px 30px rgba(0,0,0,.5);z-index:3}
+.legend{display:flex;gap:16px;font-size:11.5px;color:var(--dim);padding:4px 2px 0;flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:6px;border-radius:3px;vertical-align:middle;margin-right:6px}
+
+@media (max-width:1023px){
+  .banner{top:12px}
+  .gauge svg{width:116px;height:96px}
+}
+</style>
+</head>
+<body>
+<div class="app s-empty" id="app">
+  <div class="media" id="media">
+    <video id="vid" playsinline muted preload="auto"></video>
+    <canvas class="ov" id="ov"></canvas>
+    <div class="shade"></div>
+    <div class="vignette" id="vig"></div>
+    <div class="banner" id="banner" role="status"><i></i>Braking likely within 2 s</div>
+    <button class="bigplay glass" id="bigplay" type="button" aria-label="Play"><svg viewBox="0 0 24 24" fill="#fff"><path d="M7 4.5v15l12-7.5z"/></svg></button>
+  </div>
+
+  <header class="topbar glass">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.6-6.5 9-6.5S21 12 21 12s-3.6 6.5-9 6.5S3 12 3 12z"/><circle cx="12" cy="12" r="2.6"/></svg></div>
+      <div><b>DriveSight</b><span>Watch a drive and see when braking becomes likely</span></div>
+    </div>
+    <button class="btn" type="button" data-ourwork title="How DriveSight was built and how well it works">Our work</button>
+    <div class="seg nav" role="navigation" aria-label="Page"><button type="button" onclick="location.href='/'" title="Detections on a photo">Photo</button><button type="button" class="on" aria-current="page">Video</button></div>
+    <div class="seg" id="models" role="group" aria-label="Detector"></div>
+    <span class="chip-dev" id="dev">Device <b>-</b></span>
+  </header>
+
+  <section class="hero" id="hero" tabindex="0" aria-label="Upload a driving video">
+    <video id="preview" muted loop playsinline aria-hidden="true"></video>
+    <div class="card glass">
+      <div id="idle">
+        <div class="ic"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#a9b4ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3z"/></svg></div>
+        <h2>Drop a dashcam video</h2>
+        <p>DriveSight scores the drive five times a second: how likely the driver is to brake hard in the next 2 seconds.</p>
+        <div class="actions">
+          <button class="btn primary" id="pick" type="button">Choose a video</button>
+          <label class="row" id="speedrow" style="margin:0">Speed <input class="field num" id="speed" type="number" min="0" max="200" step="5" value="30"> km/h</label>
+        </div>
+        <div class="small">MP4, MOV, AVI, MKV or WebM, up to 60 s. The video never leaves this computer.</div>
+        <div class="kpis">
+          <div><b>YOLOv8s</b><span>detector selected out of 3</span></div>
+          <div><b class="num">23.9</b><span>AP50-95 on pedestrians and cyclists</span></div>
+          <div><b class="num">4,260</b><span>BDD100K images, 9 classes</span></div>
+          <div><b class="num">1,161</b><span>BDDA drives for the risk model</span></div>
+        </div>
+        <button class="linkbtn" type="button" data-ourwork>See how we built it</button>
+      </div>
+      <div id="busy" aria-live="polite">
+        <h2 id="bname">Analysing</h2>
+        <div class="sub" id="bsub">5 frames per second</div>
+        <ol class="steps">
+          <li id="st-decode"><i></i>Read the video<span></span></li>
+          <li id="st-detect"><i></i>Detect road users<span class="num"></span></li>
+          <li id="st-score"><i></i>Score the risk<span></span></li>
+        </ol>
+        <div class="pbar"><b id="pb"></b></div>
+        <div class="eta num"><span id="pct">0%</span><span id="eta"></span></div>
+      </div>
+    </div>
+    <input type="file" id="file" accept="video/*,.mp4,.mov,.avi,.mkv,.webm,.m4v">
+  </section>
+
+  <section class="hud hud-left glass" id="now" aria-live="polite">
+    <div class="gauge">
+      <svg viewBox="0 0 140 112" aria-hidden="true">
+        <defs><linearGradient id="gg" x1="0" x2="1"><stop offset="0" stop-color="#34e0a1"/><stop offset=".55" stop-color="#ffb547"/><stop offset="1" stop-color="#ff4d6a"/></linearGradient></defs>
+        <path id="garc" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="11" stroke-linecap="round"/>
+        <path id="gval" fill="none" stroke="#34e0a1" stroke-width="11" stroke-linecap="round" style="filter:drop-shadow(0 0 6px currentColor)"/>
+        <line id="gthr" stroke="#eef3ff" stroke-width="2.5" stroke-linecap="round"/>
+        <text id="gnum" class="gnum num" x="70" y="78" text-anchor="middle">0.00</text>
+      </svg>
+      <div><div class="glabel" id="glabel">Low risk</div><div class="gsub num" id="gsub">at 0.0 s</div></div>
+    </div>
+    <ul class="why" id="why"></ul>
+  </section>
+
+  <aside class="hud hud-right glass">
+    <div class="tabs" role="tablist"><button type="button" class="on" data-tab="drive" role="tab">This drive</button><button type="button" data-tab="settings" role="tab">Settings</button></div>
+    <div class="pane" id="tab-drive">
+      <div class="stats">
+        <button class="stat" id="speak" type="button" title="Jump to the peak"><b class="num" id="vpeak">-</b><span id="lpeak">Peak risk</span></button>
+        <div class="stat"><b class="num" id="vhigh">-</b><span>Time on alert</span></div>
+        <div class="stat"><b class="num" id="valerts">-</b><span>Alerts</span></div>
+        <div class="stat"><b class="num" id="vvru">-</b><span>With vulnerable road users</span></div>
+      </div>
+      <div class="list" id="events"></div>
+    </div>
+    <div class="pane hidden" id="tab-settings">
+      <div class="row"><span>Alert when the score is above</span><b class="num" id="thv">-</b></div>
+      <input class="slider" id="thr" type="range" min="0" max="1" step="0.01" value="0.35" aria-label="Alarm threshold">
+      <p class="hint" id="thrhint"></p>
+      <div id="speedbox">
+        <div class="sep"></div>
+        <div class="row"><span>Driving speed used by the score</span><span><input class="field num" id="speed2" type="number" min="0" max="200" step="5" value="30"> km/h</span></div>
+        <button class="btn" id="rerun" type="button" style="width:100%">Re-run with this speed</button>
+      </div>
+      <div class="sep"></div>
+      <div class="row" style="margin-bottom:4px"><b id="mlabel">-</b></div>
+      <p class="hint" id="mnote" style="margin-top:0"></p>
+      <div class="sep"></div>
+      <div class="kbd"><kbd>Space</kbd> play or pause<br><kbd>←</kbd> <kbd>→</kbd> one frame<br><kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd> previous or next alert<br><kbd>H</kbd> hide or show the panels</div>
+      <p class="hint">A research demo, not a safety system.</p>
+    </div>
+  </aside>
+
+  <section class="dock glass">
+    <div class="controls">
+      <button class="btn round primary" id="play" type="button" aria-label="Play (space)" title="Play / pause (space)"><svg id="playic" viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg></button>
+      <button class="btn icon" id="back" type="button" aria-label="Previous frame" title="Previous frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <button class="btn icon" id="fwd" type="button" aria-label="Next frame" title="Next frame"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+      <div class="time num"><b id="tcur">0.0 s</b> / <span id="tdur">0.0 s</span></div>
+      <div class="seg sm" id="rate" role="group" aria-label="Playback speed"><button type="button" data-r="0.25">0.25×</button><button type="button" data-r="0.5">0.5×</button><button type="button" data-r="1" class="on">1×</button></div>
+      <div class="grow"></div>
+      <button class="btn on" id="boxes" type="button" aria-pressed="true" title="Show detected road users">Boxes</button>
+      <button class="btn" id="sound" type="button" aria-pressed="false" title="Beep when an alert starts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>Sound</button>
+      <button class="btn" id="hud" type="button" aria-pressed="false" title="Hide the side panels to see the whole video (H)">Hide panels</button>
+      <button class="btn" id="csv" type="button">Export CSV</button>
+      <button class="btn" id="again" type="button">New video</button>
+    </div>
+    <div class="tlwrap">
+      <canvas id="tl" aria-label="Risk over time. Click or drag to move; drag the dashed line to change the alarm threshold."></canvas>
+      <div id="tip"></div>
+    </div>
+    <div class="legend"><span><i style="background:linear-gradient(90deg,#34e0a1,#ffb547,#ff4d6a)"></i>Risk score</span><span><i style="background:rgba(255,77,106,.35)"></i>Alert</span><span><i style="background:#ffb547"></i>Vulnerable road user in view</span><span>Drag the dashed line to set the threshold</span><span id="meta" style="margin-left:auto"></span></div>
+  </section>
+</div>
+<div class="toast" id="toast" role="alert"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const COLORS = {pedestrian:"#ff5d73", rider:"#ff9f43", motorcycle:"#feca57", bicycle:"#ff6bcb",
+  car:"#4cc9f0", truck:"#4895ef", bus:"#7b6cf6", "traffic light":"#2ee6a6", "traffic sign":"#a0e86f"};
+const VRU = new Set(["pedestrian","rider","motorcycle","bicycle"]);
+const CONF_VRU = .15, CONF_OTHER = .25;          // same display defaults as the photo page and the risk features
+const C = {ok:"#34e0a1", warn:"#ffb547", danger:"#ff4d6a", text:"#eef3ff", mute:"#9aa8c4", grid:"rgba(255,255,255,.08)"};
+const S = {model:"yolov8s", file:null, url:null, data:null, thr:.35, ymax:1, wasHigh:false, events:[], sound:false, boxes:true};
+const app = $("#app"), fmt = t => t.toFixed(1) + " s";
+const setState = s => { app.classList.remove("s-empty","s-busy","s-result"); app.classList.add("s-"+s); };
+
+/* ---------- detector + scoring method ---------- */
+fetch("/api/models").then(r=>r.json()).then(m=>{
+  $("#dev b").textContent = m.device; S.model = m.default;
+  const box = $("#models");
+  m.models.filter(x=>x.available).forEach(x=>{
+    const b = document.createElement("button"); b.type = "button"; b.textContent = x.label; b.dataset.k = x.key; b.title = x.note;
+    b.onclick = () => { S.model = x.key; mark(); };
+    box.appendChild(b);
+  });
+  const mark = () => box.querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.k===S.model));
+  mark();
+}).catch(()=>toast("The DriveSight server is not reachable. Start it with: python -m uvicorn app.server:app"));
+fetch("/api/risk/info").then(r=>r.json()).then(i=>{ $("#speedrow").style.display = i.uses_speed ? "" : "none"; }).catch(()=>{});
+
+/* ---------- upload ---------- */
+const hero = $("#hero"), fileIn = $("#file");
+hero.onclick = e => { if(app.classList.contains("s-busy") || e.target.closest("#speedrow") || e.target.closest("[data-ourwork]")) return; if(e.target.id!=="pick") fileIn.click(); };
+$("#pick").onclick = () => fileIn.click();
+hero.onkeydown = e => { if((e.key==="Enter"||e.key===" ") && e.target===hero && !app.classList.contains("s-busy")){ e.preventDefault(); fileIn.click(); } };
+fileIn.onchange = () => fileIn.files[0] && run(fileIn.files[0]);
+["dragenter","dragover"].forEach(ev=>window.addEventListener(ev,e=>{e.preventDefault(); if(!app.classList.contains("s-result")) hero.classList.add("over");}));
+["dragleave","drop"].forEach(ev=>window.addEventListener(ev,e=>{e.preventDefault(); hero.classList.remove("over");}));
+window.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if(f && !app.classList.contains("s-busy")) run(f); });
+const speedVal = () => Math.min(200, Math.max(0, parseFloat($("#speed").value) || 0));
+$("#speed2").onchange = () => { $("#speed").value = $("#speed2").value; };
+$("#speed").onchange = () => { $("#speed2").value = $("#speed").value; };
+
+function step(id, cls, txt){ const li = $("#st-"+id); li.className = cls; if(txt!==undefined) li.querySelector("span").textContent = txt; }
+async function run(file){
+  if(!(file.type.startsWith("video/") || /\.(mp4|mov|avi|mkv|webm|m4v)$/i.test(file.name))) return toast("This is not a video file. Choose an MP4, MOV, AVI, MKV or WebM file.");
+  S.file = file; vid.pause(); app.classList.remove("playing");
+  if(S.url) URL.revokeObjectURL(S.url);
+  S.url = URL.createObjectURL(file);
+  setState("busy");
+  const pv = $("#preview"); pv.src = S.url; pv.play().catch(()=>{});
+  $("#bname").textContent = file.name; $("#bsub").textContent = "Scoring 5 frames per second with " + ($("#models .on")?.textContent || "the detector");
+  ["decode","detect","score"].forEach(k=>step(k,"",""));
+  $("#pb").style.width = "0%"; $("#pct").textContent = "0%"; $("#eta").textContent = "";
+  const fd = new FormData(); fd.append("file", file); fd.append("model", S.model); fd.append("speed", speedVal());
+  const t0 = performance.now(); let tDet = 0;
+  try{
+    const r = await fetch("/api/risk/stream", {method:"POST", body:fd});
+    if(!r.ok){ const j = await r.json().catch(()=>({})); throw new Error(j.detail || "The analysis failed."); }
+    const reader = r.body.getReader(), dec = new TextDecoder(); let buf = "", result = null;
+    for(;;){
+      const {value, done} = await reader.read(); if(done) break;
+      buf += dec.decode(value, {stream:true}); let k;
+      while((k = buf.indexOf("\n")) >= 0){
+        const line = buf.slice(0,k).trim(); buf = buf.slice(k+1); if(!line) continue;
+        const ev = JSON.parse(line);
+        if(ev.error) throw new Error(ev.error);
+        if(ev.result){ result = ev.result; continue; }
+        if(ev.stage==="load"){ step("decode","now"); $("#eta").textContent = "loading the detector"; }
+        if(ev.stage==="decode"){ step("decode","now"); $("#eta").textContent = "reading frames"; }
+        if(ev.stage==="detect"){
+          step("decode","ok"); if(!tDet) tDet = performance.now();
+          step("detect","now", ev.done + " / " + ev.total);
+          const p = ev.done/ev.total; $("#pb").style.width = (5+p*90)+"%"; $("#pct").textContent = Math.round(5+p*90)+"%";
+          if(ev.done>0){ const left = (performance.now()-tDet)/ev.done*(ev.total-ev.done)/1000; $("#eta").textContent = left>1 ? "about " + Math.ceil(left) + " s left" : ""; }
+        }
+        if(ev.stage==="score"){ step("detect","ok"); step("score","now"); $("#pb").style.width = "97%"; $("#pct").textContent = "97%"; $("#eta").textContent = ""; }
+      }
+    }
+    if(!result) throw new Error("The analysis stopped before the end.");
+    step("score","ok"); $("#pb").style.width = "100%";
+    S.data = result; S.data.wall = (performance.now()-t0)/1000;
+    show();
+  }catch(err){ toast(err.message); setState("empty"); }
+  finally{ $("#preview").pause(); }
+}
+
+/* ---------- result ---------- */
+const vid = $("#vid"), ov = $("#ov"), ctx = ov.getContext("2d"), media = $("#media");
+function show(){
+  const d = S.data;
+  setState("result");
+  vid.src = S.url; vid.currentTime = 0; setRate(1);
+  const maxRisk = Math.max(...d.frames.map(f=>f.risk), d.threshold);
+  S.ymax = Math.max(1, Math.ceil(maxRisk*10)/10);
+  const sl = $("#thr"); sl.max = S.ymax; S.thr = d.threshold; sl.value = d.threshold; $("#thv").textContent = d.threshold.toFixed(2);
+  $("#thrhint").textContent = d.method === "learned"
+    ? "The default is the threshold chosen on the BDDA validation clips (best balance of false alarms and misses)."
+    : "The default 0.35 is a demo value: the rule-based score has no labelled data to tune it on.";
+  $("#mlabel").textContent = d.label; $("#mnote").textContent = d.note;
+  $("#speedbox").style.display = d.uses_speed ? "" : "none"; $("#speed2").value = d.speed_kmh;
+  $("#tdur").textContent = fmt(d.duration);
+  $("#meta").textContent = `${d.model}, ${d.frames.length} frames in ${d.wall.toFixed(1)} s`;
+  S.wasHigh = false; $("#garc").setAttribute("d", arc(G.a0, G.a1)); recompute();
+  requestAnimationFrame(()=>{ layout(); update(); });
+}
+const frameIdx = t => Math.min(S.data.frames.length-1, Math.max(0, Math.floor(t*S.data.sample_fps + 1e-6)));
+const frameAt = t => S.data.frames[frameIdx(t)];
+const level = r => r >= S.thr ? "hi" : r >= S.thr*0.6 ? "mid" : "lo";
+const riskColor = r => r >= S.thr ? C.danger : r >= S.thr*0.6 ? C.warn : C.ok;
+
+/* overlay canvas sits exactly on the displayed (letterboxed) video */
+function layout(){
+  if(!S.data) return;
+  const W = vid.videoWidth || S.data.width, H = vid.videoHeight || S.data.height, m = media.getBoundingClientRect();
+  const k = Math.min(m.width/W, m.height/H), w = W*k, h = H*k;
+  Object.assign(ov.style, {left:(m.width-w)/2+"px", top:(m.height-h)/2+"px", width:w+"px", height:h+"px"});
+  if(ov.width!==W || ov.height!==H){ ov.width = W; ov.height = H; }
+}
+window.addEventListener("resize", ()=>{ if(S.data){ layout(); update(); } });
+vid.addEventListener("loadedmetadata", ()=>{ layout(); update(); });
+
+function recompute(){
+  const fr = S.data.frames, dt = 1/S.data.sample_fps, out = []; let cur = null;
+  fr.forEach(f=>{
+    if(f.risk >= S.thr){ if(!cur) cur = {t1:f.t, peak:f.risk}; cur.peak = Math.max(cur.peak, f.risk); cur.t2 = Math.min(S.data.duration, f.t+dt); }
+    else if(cur){ out.push(cur); cur = null; }
+  });
+  if(cur) out.push(cur);
+  S.events = out;
+  const peak = fr.reduce((a,f)=>f.risk>a.risk?f:a, fr[0]);
+  const high = out.reduce((a,e)=>a+(e.t2-e.t1),0), vru = fr.filter(f=>f.n_vru>0).length/fr.length;
+  $("#vpeak").textContent = peak.risk.toFixed(2); $("#lpeak").textContent = "Peak risk, at " + fmt(peak.t); $("#speak").onclick = () => seek(peak.t);
+  $("#vhigh").textContent = fmt(high); $("#valerts").textContent = out.length; $("#vvru").textContent = Math.round(vru*100) + "%";
+  const box = $("#events"); box.innerHTML = "";
+  if(!out.length){ box.innerHTML = '<div class="empty">No alert at this threshold. Drag the dashed line on the timeline down to see the riskiest moments.</div>'; return; }
+  out.forEach((e,i)=>{
+    const b = document.createElement("button"); b.type = "button"; b.className = "ev"; b.dataset.i = i;
+    b.innerHTML = `<i></i><span style="margin:0;color:var(--text)" class="num">${fmt(e.t1)} to ${fmt(e.t2)}</span><span class="num">peak ${e.peak.toFixed(2)}</span>`;
+    b.onclick = () => { seek(Math.max(0, e.t1 - 1)); vid.play(); };
+    box.appendChild(b);
+  });
+}
+
+function drawBoxes(f){
+  const W = ov.width, H = ov.height; ctx.clearRect(0,0,W,H);
+  if(!S.boxes) return;
+  const lw = Math.max(2, Math.round(Math.max(W,H)/440)), fs = Math.max(12, Math.round(Math.max(W,H)/92));
+  f.dets.filter(d=>d.conf >= (VRU.has(d.name)?CONF_VRU:CONF_OTHER)).forEach(d=>{
+    const [x1,y1,x2,y2] = d.box, x=x1*W, y=y1*H, w=(x2-x1)*W, h=(y2-y1)*H, c = COLORS[d.name]||"#fff", v = VRU.has(d.name);
+    // corner brackets instead of full boxes: lighter, HUD-like
+    const L = Math.min(w,h)*0.28, r = Math.min(8, lw*3);
+    ctx.lineWidth = v ? lw*1.5 : lw; ctx.strokeStyle = c; ctx.lineCap = "round";
+    if(v){ ctx.shadowColor = c; ctx.shadowBlur = lw*6; ctx.fillStyle = c+"22"; ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fill(); }
+    ctx.beginPath();
+    ctx.moveTo(x, y+L); ctx.lineTo(x, y); ctx.lineTo(x+L, y);
+    ctx.moveTo(x+w-L, y); ctx.lineTo(x+w, y); ctx.lineTo(x+w, y+L);
+    ctx.moveTo(x+w, y+h-L); ctx.lineTo(x+w, y+h); ctx.lineTo(x+w-L, y+h);
+    ctx.moveTo(x+L, y+h); ctx.lineTo(x, y+h); ctx.lineTo(x, y+h-L);
+    ctx.stroke(); ctx.shadowBlur = 0;
+    if(v || w*h > W*H*0.004){
+      ctx.font = "650 "+fs+"px Segoe UI Variable Text,Inter,sans-serif";
+      const tw = ctx.measureText(d.name).width+fs*.9, th = fs*1.5, ty = y-th-4<0 ? y+4 : y-th-4;
+      ctx.fillStyle = "rgba(6,10,18,.72)"; ctx.beginPath(); ctx.roundRect(x, ty, tw, th, th/2); ctx.fill();
+      ctx.fillStyle = c; ctx.textBaseline = "middle"; ctx.fillText(d.name, x+fs*.45, ty+th/2+1);
+    }
+  });
+}
+
+/* ---------- gauge ---------- */
+const G = {cx:70, cy:66, r:52, a0:-210, a1:30};
+const pt = a => [G.cx + G.r*Math.cos(a*Math.PI/180), G.cy + G.r*Math.sin(a*Math.PI/180)];
+function arc(a, b){ const [x0,y0] = pt(a), [x1,y1] = pt(b); return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${G.r} ${G.r} 0 ${b-a>180?1:0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`; }
+function drawGauge(f){
+  const k = Math.min(1, f.risk/S.ymax), a = G.a0 + (G.a1-G.a0)*Math.max(k, 0.003), col = riskColor(f.risk);
+  const g = $("#gval"); g.setAttribute("d", arc(G.a0, a)); g.setAttribute("stroke", col); g.style.color = col;
+  const at = (G.a0 + (G.a1-G.a0)*Math.min(1, S.thr/S.ymax))*Math.PI/180, l = $("#gthr");
+  l.setAttribute("x1", G.cx + (G.r-11)*Math.cos(at)); l.setAttribute("y1", G.cy + (G.r-11)*Math.sin(at));
+  l.setAttribute("x2", G.cx + (G.r+11)*Math.cos(at)); l.setAttribute("y2", G.cy + (G.r+11)*Math.sin(at));
+  $("#gnum").textContent = f.risk.toFixed(2);
+  const lv = level(f.risk), card = $("#now");
+  card.classList.remove("hi","mid","lo"); card.classList.add(lv);
+  $("#glabel").textContent = lv==="hi" ? "Braking likely" : lv==="mid" ? "Watch out" : "Low risk";
+  $("#gsub").textContent = (lv==="hi" ? "within the next 2 s, " : "") + "at " + fmt(f.t);
+  const why = $("#why"); why.innerHTML = "";
+  const items = f.reasons.map(r=>r[0].toUpperCase()+r.slice(1));
+  if(!items.length && f.n_vru) items.push(f.n_vru + " vulnerable road user" + (f.n_vru>1?"s":"") + " in view, not in the path");
+  if(!items.length){ const li = document.createElement("li"); li.className = "calm"; li.textContent = "Nothing close ahead"; why.appendChild(li); }
+  items.forEach(t=>{ const li = document.createElement("li"); li.textContent = t; why.appendChild(li); });
+  const hi = lv==="hi";
+  $("#vig").classList.toggle("on", hi); $("#banner").classList.toggle("on", hi);
+  if(hi && !S.wasHigh && !vid.paused) beep();
+  S.wasHigh = hi;
+  document.querySelectorAll(".ev").forEach(b=>{ const e = S.events[+b.dataset.i]; b.classList.toggle("cur", !!e && f.t >= e.t1 && f.t < e.t2); });
+}
+
+/* ---------- timeline ---------- */
+const tl = $("#tl"), tc = tl.getContext("2d"), tip = $("#tip");
+const P = {l:30, r:8, t:10, lane:10, axis:16};
+let geo = null;
+function drawTimeline(){
+  const d = S.data, dpr = window.devicePixelRatio||1, W = tl.clientWidth, H = tl.clientHeight;
+  if(tl.width !== Math.round(W*dpr) || tl.height !== Math.round(H*dpr)){ tl.width = Math.round(W*dpr); tl.height = Math.round(H*dpr); }
+  tc.setTransform(dpr,0,0,dpr,0,0); tc.clearRect(0,0,W,H);
+  const dur = Math.max(d.duration, 1e-3), fr = d.frames, dt = 1/d.sample_fps;
+  const plotB = H - P.axis - P.lane - 6;
+  const X = t => P.l + t/dur*(W-P.l-P.r), Y = r => P.t + (1 - Math.min(r,S.ymax)/S.ymax)*(plotB-P.t);
+  geo = {X, Y, W, H, dur, plotB};
+  tc.font = "11px Segoe UI Variable Text,Inter,sans-serif"; tc.lineWidth = 1;
+  [0, S.ymax/2, S.ymax].forEach(r=>{ const y = Math.round(Y(r))+.5; tc.strokeStyle = C.grid; tc.beginPath(); tc.moveTo(P.l,y); tc.lineTo(W-P.r,y); tc.stroke(); tc.fillStyle = C.mute; tc.fillText(r.toFixed(1), 2, y+4); });
+  tc.fillStyle = "rgba(255,77,106,.16)";
+  S.events.forEach(e=>tc.fillRect(X(e.t1), P.t, X(e.t2)-X(e.t1), plotB-P.t));
+  const grad = tc.createLinearGradient(0, Y(S.ymax), 0, Y(0)), tN = Math.min(1, S.thr/S.ymax);
+  grad.addColorStop(0, "rgba(255,77,106,.45)"); grad.addColorStop(Math.max(0, 1-tN), "rgba(255,77,106,.3)");
+  grad.addColorStop(Math.min(1, 1-tN*0.6), "rgba(255,181,71,.2)"); grad.addColorStop(1, "rgba(52,224,161,.06)");
+  tc.beginPath(); tc.moveTo(X(fr[0].t), Y(0)); fr.forEach(f=>tc.lineTo(X(f.t), Y(f.risk))); tc.lineTo(X(fr[fr.length-1].t), Y(0)); tc.closePath(); tc.fillStyle = grad; tc.fill();
+  tc.lineWidth = 2.2; tc.lineJoin = "round"; tc.lineCap = "round";
+  for(let i=1;i<fr.length;i++){
+    const c = riskColor(Math.max(fr[i].risk, fr[i-1].risk)); tc.strokeStyle = c; tc.shadowColor = c; tc.shadowBlur = 6;
+    tc.beginPath(); tc.moveTo(X(fr[i-1].t), Y(fr[i-1].risk)); tc.lineTo(X(fr[i].t), Y(fr[i].risk)); tc.stroke();
+  }
+  tc.shadowBlur = 0;
+  const ty = Y(S.thr);
+  tc.setLineDash([5,5]); tc.lineWidth = 1.3; tc.strokeStyle = "rgba(238,243,255,.7)"; tc.beginPath(); tc.moveTo(P.l, ty); tc.lineTo(W-P.r, ty); tc.stroke(); tc.setLineDash([]);
+  const lab = S.thr.toFixed(2); tc.font = "700 11px Segoe UI Variable Text,Inter,sans-serif"; const lw = tc.measureText(lab).width + 14;
+  tc.fillStyle = C.text; tc.beginPath(); tc.roundRect(W-P.r-lw, ty-9, lw, 18, 9); tc.fill();
+  tc.fillStyle = "#0a1020"; tc.fillText(lab, W-P.r-lw+7, ty+4);
+  const ly = plotB + 6;
+  tc.fillStyle = "rgba(255,255,255,.06)"; tc.beginPath(); tc.roundRect(P.l, ly, W-P.l-P.r, P.lane, 5); tc.fill();
+  tc.fillStyle = C.warn;
+  fr.forEach(f=>{ if(f.n_vru>0){ tc.beginPath(); tc.roundRect(X(f.t), ly+2, Math.max(2, X(f.t+dt)-X(f.t)-1), P.lane-4, 2); tc.fill(); } });
+  tc.fillStyle = C.mute; tc.font = "11px Segoe UI Variable Text,Inter,sans-serif";
+  const stepS = dur > 40 ? 10 : dur > 16 ? 5 : dur > 6 ? 2 : 1;
+  for(let s=0; s<=dur+1e-6; s+=stepS) tc.fillText(s+" s", Math.min(X(s)-6, W-P.r-22), H-2);
+  const x = X(Math.min(vid.currentTime||0, dur));
+  tc.strokeStyle = C.text; tc.lineWidth = 2; tc.beginPath(); tc.moveTo(x, P.t-4); tc.lineTo(x, ly+P.lane); tc.stroke();
+  tc.fillStyle = C.text; tc.beginPath(); tc.arc(x, P.t-4, 4, 0, Math.PI*2); tc.fill();
+}
+function tlPos(e){ const r = tl.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+const timeAtX = x => Math.min(geo.dur, Math.max(0, (x-P.l)/(geo.W-P.l-P.r)*geo.dur));
+const thrAtY = y => Math.max(0, Math.min(S.ymax, (1-(y-P.t)/(geo.plotB-P.t))*S.ymax));
+const nearThr = p => Math.abs(p.y - geo.Y(S.thr)) < 9 && p.x > P.l;
+let drag = null;
+tl.addEventListener("pointerdown", e=>{ if(!geo) return; const p = tlPos(e); tl.setPointerCapture(e.pointerId);
+  drag = nearThr(p) ? "thr" : "seek"; drag==="seek" ? seek(timeAtX(p.x)) : setThr(Math.round(thrAtY(p.y)*100)/100); });
+tl.addEventListener("pointermove", e=>{
+  if(!geo) return; const p = tlPos(e);
+  if(drag==="seek") seek(timeAtX(p.x)); else if(drag==="thr") setThr(Math.round(thrAtY(p.y)*100)/100);
+  tl.style.cursor = drag==="thr" || (!drag && nearThr(p)) ? "ns-resize" : "pointer";
+  const f = frameAt(timeAtX(p.x));
+  tip.style.display = "block"; tip.style.left = Math.min(Math.max(p.x, 90), geo.W-90) + "px"; tip.style.top = p.y + "px";
+  tip.innerHTML = `<b class="num">${f.risk.toFixed(2)}</b> at ${fmt(f.t)}` + (f.reasons.length ? "<br>" + f.reasons.join(", ") : f.n_vru ? "<br>vulnerable road user in view" : "");
+});
+tl.addEventListener("pointerup", ()=>{ drag = null; });
+tl.addEventListener("pointerleave", ()=>{ tip.style.display = "none"; });
+
+/* ---------- playback ---------- */
+function seek(t){ vid.currentTime = Math.max(0, Math.min(t, S.data.duration - 1e-3)); update(); }
+function setThr(v){ S.thr = v; $("#thr").value = v; $("#thv").textContent = v.toFixed(2); recompute(); update(); }
+function setRate(r){ vid.playbackRate = r; document.querySelectorAll("#rate button").forEach(b=>b.classList.toggle("on", +b.dataset.r===r)); }
+document.querySelectorAll("#rate button").forEach(b=>b.onclick = () => setRate(+b.dataset.r));
+const togglePlay = () => { if(vid.paused || vid.ended){ if(vid.ended) vid.currentTime = 0; vid.play(); } else vid.pause(); };
+$("#play").onclick = togglePlay; $("#bigplay").onclick = e => { e.stopPropagation(); togglePlay(); };
+media.onclick = () => { if(app.classList.contains("s-result")) togglePlay(); };
+const stepFrame = k => { vid.pause(); seek(frameIdx(vid.currentTime)/S.data.sample_fps + k/S.data.sample_fps + 1e-3); };
+$("#back").onclick = () => stepFrame(-1); $("#fwd").onclick = () => stepFrame(1);
+function jumpAlert(dir){
+  const t = vid.currentTime, ev = dir>0 ? S.events.find(e=>e.t1 > t+0.05) : [...S.events].reverse().find(e=>e.t1 < t-0.25);
+  if(ev) seek(ev.t1); else toast(dir>0 ? "No later alert." : "No earlier alert.");
+}
+const PLAY = '<path d="M7 4.5v15l12-7.5z"/>', PAUSE = '<path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z"/>';
+vid.addEventListener("play", ()=>{ app.classList.add("playing"); $("#playic").innerHTML = PAUSE; $("#play").setAttribute("aria-label","Pause (space)"); requestAnimationFrame(loop); });
+vid.addEventListener("pause", ()=>{ app.classList.remove("playing"); $("#playic").innerHTML = PLAY; $("#play").setAttribute("aria-label","Play (space)"); update(); });
+vid.addEventListener("ended", ()=>{ app.classList.remove("playing"); $("#playic").innerHTML = PLAY; });
+vid.addEventListener("seeked", update); vid.addEventListener("loadeddata", update);
+vid.addEventListener("error", ()=>{ if(S.data) toast("Your browser cannot play this video format. The risk timeline is still available."); });
+function loop(){ update(); if(!vid.paused && !vid.ended) requestAnimationFrame(loop); }
+function update(){
+  if(!S.data) return;
+  const f = frameAt(vid.currentTime || 0);
+  $("#tcur").textContent = fmt(vid.currentTime || 0);
+  drawBoxes(f); drawGauge(f); drawTimeline();
+}
+$("#thr").oninput = e => setThr(parseFloat(e.target.value));
+const toggleHud = () => { const on = app.classList.toggle("nohud"); $("#hud").textContent = on ? "Show panels" : "Hide panels"; $("#hud").setAttribute("aria-pressed", on); $("#hud").classList.toggle("on", on); };
+$("#hud").onclick = toggleHud;
+document.querySelectorAll(".tabs button").forEach(b=>b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on", x===b));
+  $("#tab-drive").classList.toggle("hidden", b.dataset.tab!=="drive"); $("#tab-settings").classList.toggle("hidden", b.dataset.tab!=="settings");
+});
+$("#boxes").onclick = () => { S.boxes = !S.boxes; $("#boxes").classList.toggle("on", S.boxes); $("#boxes").setAttribute("aria-pressed", S.boxes); update(); };
+$("#sound").onclick = () => { S.sound = !S.sound; $("#sound").classList.toggle("on", S.sound); $("#sound").setAttribute("aria-pressed", S.sound); if(S.sound) beep(); };
+let actx = null;
+function beep(){
+  if(!S.sound) return;
+  try{ actx = actx || new AudioContext(); const o = actx.createOscillator(), g = actx.createGain(); o.type = "sine"; o.frequency.value = 880;
+    g.gain.setValueAtTime(0.0001, actx.currentTime); g.gain.exponentialRampToValueAtTime(0.25, actx.currentTime+0.02); g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime+0.28);
+    o.connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime+0.3); }catch(e){}
+}
+document.addEventListener("keydown", e=>{
+  if(!S.data || !app.classList.contains("s-result") || e.target.matches("input") || document.querySelector(".ow-back.on")) return;
+  if(e.key===" " && !e.target.matches("button")){ e.preventDefault(); togglePlay(); }
+  else if(e.key==="ArrowRight"){ e.preventDefault(); e.shiftKey ? jumpAlert(1) : stepFrame(1); }
+  else if(e.key==="ArrowLeft"){ e.preventDefault(); e.shiftKey ? jumpAlert(-1) : stepFrame(-1); }
+  else if(e.key==="h" || e.key==="H") toggleHud();
+});
+
+/* ---------- actions ---------- */
+$("#rerun").onclick = () => { $("#speed").value = $("#speed2").value; S.file && run(S.file); };
+$("#again").onclick = () => { vid.pause(); fileIn.value = ""; S.data = null; $("#vig").classList.remove("on"); $("#banner").classList.remove("on"); ctx.clearRect(0,0,ov.width,ov.height); vid.removeAttribute("src"); vid.load(); setState("empty"); };
+$("#csv").onclick = () => {
+  const rows = [["time_s","risk","alert","n_vulnerable_road_users","reasons"]].concat(
+    S.data.frames.map(f=>[f.t.toFixed(1), f.risk.toFixed(4), f.risk>=S.thr ? 1 : 0, f.n_vru, '"' + f.reasons.join("; ") + '"']));
+  const a = document.createElement("a"); a.download = (S.file?.name || "video").replace(/\.[^.]+$/, "") + "_risk.csv";
+  a.href = URL.createObjectURL(new Blob([rows.map(r=>r.join(",")).join("\n")], {type:"text/csv"})); a.click();
+};
+let tt; function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove("on"),4500); }
+</script>
+<script src="/static/ourwork.js"></script>
+</body>
+</html>

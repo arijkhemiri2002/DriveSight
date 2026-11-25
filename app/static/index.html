@@ -4,323 +4,324 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DriveSight</title>
+<link rel="stylesheet" href="/static/cockpit.css">
 <style>
-:root{
-  --bg:#070b14; --bg2:#0d1424; --card:#111a2e; --line:#1f2c47; --text:#e8eefc; --mute:#8a9bbd;
-  --accent:#2ee6a6; --warn:#ff9f43; --danger:#ff5d73;
-  --d1:#0e1830; --d2:#0a1224; --dline:#2c3f66; --road:#0b1428;
-}
-@media (prefers-color-scheme: light){
-  :root:not([data-theme="dark"]){--bg:#f3f6fc;--bg2:#e7edf8;--card:#ffffff;--line:#d5deef;--text:#0e1a33;--mute:#5a6b8c;
-    --d1:#ffffff;--d2:#e9f0fb;--dline:#b9c8e6;--road:#dbe6f6}
-}
-:root[data-theme="light"]{--bg:#f3f6fc;--bg2:#e7edf8;--card:#ffffff;--line:#d5deef;--text:#0e1a33;--mute:#5a6b8c;
-  --d1:#ffffff;--d2:#e9f0fb;--dline:#b9c8e6;--road:#dbe6f6}
-*{box-sizing:border-box;margin:0}
-html,body{min-height:100%}
-body{font-family:Inter,"Segoe UI",system-ui,sans-serif;background:radial-gradient(1200px 600px at 70% -10%,var(--bg2),var(--bg));
-  color:var(--text);padding:22px 16px 40px;-webkit-font-smoothing:antialiased}
-.wrap{max-width:1240px;margin:0 auto}
-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px;flex-wrap:wrap}
-.brand{display:flex;align-items:center;gap:12px}
-.logo{width:38px;height:38px;border-radius:11px;background:linear-gradient(135deg,var(--accent),#4cc9f0);display:grid;place-items:center;
-  box-shadow:0 6px 24px #2ee6a644}
-.logo svg{width:22px;height:22px}
-h1{font-size:21px;letter-spacing:.2px}
-h1 small{display:block;font-size:12px;font-weight:500;color:var(--mute);letter-spacing:.3px;margin-top:2px}
-.pill{font-size:12px;color:var(--mute);border:1px solid var(--line);border-radius:99px;padding:6px 12px;background:var(--card);cursor:pointer}
-.pill b{color:var(--accent)}
-.seg{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:4px;gap:2px}
-.seg button{border:0;background:transparent;color:var(--mute);padding:8px 14px;border-radius:9px;font:600 13px inherit;cursor:pointer;transition:.18s}
-.seg button:hover{color:var(--text)}
-.seg button.on{background:linear-gradient(135deg,var(--accent),#4cc9f0);color:#04121c}
-.hint{font-size:12px;color:var(--mute);margin:8px 2px 0}
-
-/* ---------- drop zone ---------- */
-#drop{position:relative;border-radius:22px;min-height:440px;display:grid;place-items:center;text-align:center;cursor:pointer;overflow:hidden;
-  background:linear-gradient(180deg,var(--d1),var(--d2));border:1.5px dashed var(--dline);transition:.25s}
-#drop:hover,#drop.over{border-color:var(--accent);box-shadow:0 0 0 6px #2ee6a61a,0 20px 60px #2ee6a61f;transform:translateY(-2px)}
-.road{position:absolute;left:0;right:0;bottom:0;height:120px;opacity:.9;
-  background:linear-gradient(180deg,transparent,var(--road) 60%)}
-.lane{position:absolute;left:-10%;right:-10%;bottom:46px;height:5px;
-  background:repeating-linear-gradient(90deg,#2ee6a6 0 46px,transparent 46px 96px);animation:go 1.1s linear infinite;opacity:.65;border-radius:4px}
-@keyframes go{to{background-position:96px 0}}
-.dropin{position:relative;z-index:2;padding:30px 20px 90px}
-.drop-ic{width:78px;height:78px;margin:0 auto 18px;border-radius:24px;display:grid;place-items:center;
-  background:linear-gradient(135deg,#2ee6a622,#4cc9f022);border:1px solid #2ee6a655;animation:float 3.2s ease-in-out infinite}
-@keyframes float{50%{transform:translateY(-8px)}}
-.dropin h2{font-size:26px;margin-bottom:8px}
-.dropin p{color:var(--mute);font-size:14.5px;line-height:1.55}
-.dropin kbd{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:1px 7px;font-size:12px}
-.btnrow{display:flex;gap:10px;justify-content:center;margin-top:20px;flex-wrap:wrap}
-.btn{border:1px solid var(--line);background:var(--card);color:var(--text);border-radius:11px;padding:10px 16px;font:600 13px inherit;cursor:pointer;transition:.18s}
-.btn:hover{border-color:var(--accent);color:var(--accent)}
-.btn.primary{background:linear-gradient(135deg,var(--accent),#4cc9f0);color:#04121c;border:0}
-.btn.primary:hover{filter:brightness(1.08);color:#04121c}
-input[type=file]{display:none}
-
-/* ---------- result ---------- */
-#result{display:none;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
-@media (max-width:960px){#result{grid-template-columns:1fr}}
-.stage{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:12px}
-.canvaswrap{position:relative;border-radius:14px;overflow:hidden;background:#000;line-height:0;user-select:none;touch-action:none}
-.canvaswrap img,.canvaswrap canvas{width:100%;height:auto;display:block}
-#ov{position:absolute;inset:0}
-#handle{position:absolute;top:0;bottom:0;width:3px;background:#fff;box-shadow:0 0 14px #000a;cursor:ew-resize;display:none;transform:translateX(-1.5px)}
-#handle::after{content:"\2194";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;
-  background:#fff;color:#111;display:grid;place-items:center;font:700 16px inherit;box-shadow:0 4px 16px #0008}
-.scan{position:absolute;inset:0;pointer-events:none;display:none;overflow:hidden}
-.scan::after{content:"";position:absolute;left:0;right:0;height:90px;top:-90px;
-  background:linear-gradient(180deg,transparent,#2ee6a666,transparent);border-bottom:2px solid #2ee6a6;animation:scan 1.3s ease-in-out infinite}
+:root{--dock-h:70px}
+.app:not(.s-result) .hud,.app:not(.s-result) .dock{display:none}
+.app.s-result .hero,.app.s-busy .hero{display:none}
+.media img{opacity:0;transition:opacity .3s}
+.app.s-busy .media img,.app.s-result .media img{opacity:1}
+#handle{position:absolute;width:3px;background:#fff;box-shadow:0 0 14px #000a;cursor:ew-resize;display:none;transform:translateX(-1.5px);z-index:2;touch-action:none}
+#handle::after{content:"\2194";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;
+  background:#fff;color:#0a1020;display:grid;place-items:center;font:700 16px var(--font);box-shadow:0 4px 16px #0008}
+.scan{position:absolute;pointer-events:none;display:none;overflow:hidden;z-index:2}
+.scan::after{content:"";position:absolute;left:0;right:0;height:120px;top:-120px;
+  background:linear-gradient(180deg,transparent,rgba(var(--accent-rgb),.4),transparent);border-bottom:2px solid var(--accent);animation:scan 1.3s ease-in-out infinite}
 @keyframes scan{to{top:100%}}
-.scan.on{display:block;background:#04121c66}
-.bar{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 4px 2px;flex-wrap:wrap}
-.meta{font-size:12.5px;color:var(--mute)}
-.meta b{color:var(--text)}
-.panel{display:flex;flex-direction:column;gap:14px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px}
-.card h3{font-size:12px;letter-spacing:1px;text-transform:uppercase;color:var(--mute);margin-bottom:12px;font-weight:700}
-#alert{border-radius:18px;padding:16px 18px;border:1px solid var(--line);background:var(--card)}
-#alert.vru{background:linear-gradient(135deg,#ff5d7322,#ff9f4322);border-color:#ff5d7366}
-#alert.clear{background:linear-gradient(135deg,#2ee6a622,#4cc9f022);border-color:#2ee6a655}
-#alert .big{font-size:34px;font-weight:800;line-height:1}
-#alert .sub{font-size:13px;color:var(--mute);margin-top:6px}
-.chips{display:flex;flex-wrap:wrap;gap:8px}
-.chip{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:99px;padding:6px 11px 6px 8px;font:600 12.5px inherit;
-  background:transparent;color:var(--text);cursor:pointer;transition:.15s}
-.chip i{width:11px;height:11px;border-radius:50%;display:inline-block}
+.app.s-busy .scan{display:block}
+.busytag{position:absolute;left:50%;bottom:calc(var(--gap) + 10px);transform:translateX(-50%);z-index:3;padding:10px 16px;display:none;font-weight:600;font-size:13.5px}
+.app.s-busy .busytag{display:block}
+.vignette.warn{box-shadow:inset 0 0 0 2px rgba(255,181,71,.7),inset 0 0 140px 20px rgba(255,93,115,.3)}
+
+/* danger gauge (same drawing as the video page) */
+.gauge{display:flex;align-items:center;gap:14px}
+.gauge svg{width:120px;height:96px;flex:none}
+.gnum{font-size:27px;font-weight:750;fill:var(--text)}
+.glabel{font-size:20px;font-weight:750;letter-spacing:-.2px;white-space:nowrap}
+.gsub{font-size:12.5px;color:var(--mute);margin-top:4px}
+#sum.hi .glabel{color:var(--danger)} #sum.mid .glabel{color:var(--warn)} #sum.lo .glabel{color:var(--ok)}
+#sum.hi{border-color:rgba(255,77,106,.6);box-shadow:0 18px 50px rgba(0,0,0,.38),0 0 40px rgba(255,77,106,.22)}
+.why{list-style:none;padding:0;margin-top:10px;display:flex;flex-direction:column;gap:7px}
+.why li{display:flex;align-items:center;gap:9px;font-size:13px}
+.why li::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--warn);flex:none}
+#sum.hi .why li::before{background:var(--danger)}
+.why li.calm{color:var(--mute)} .why li.calm::before{background:var(--ok)}
+.vrurow{display:flex;gap:14px;align-items:center}
+.vrurow b{font-size:34px;font-weight:750;min-width:42px;text-align:center}
+#sum .hint a{color:#c3cbff}
+/* summary panel */
+#sum .lab{font-size:14px;font-weight:650}
+.vrurow.has b{color:var(--danger)} .vrurow b{color:var(--ok)}
+.mini{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.mini:empty{display:none}
+.mini span{font-size:12px;padding:5px 10px;border-radius:99px;background:rgba(255,255,255,.06);border:1px solid var(--edge);color:var(--text)}
+
+/* right panel */
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{display:flex;align-items:center;gap:7px;border:1px solid var(--edge2);border-radius:99px;padding:6px 11px 6px 8px;font-weight:600;font-size:12.5px;
+  background:rgba(255,255,255,.04);cursor:pointer;transition:opacity .15s}
+.chip i{width:10px;height:10px;border-radius:50%;display:inline-block;box-shadow:0 0 8px currentColor}
 .chip em{font-style:normal;color:var(--mute);font-weight:600}
 .chip.off{opacity:.35}
-.chip.vru{border-color:#ff9f4399}
-.slider{width:100%;accent-color:var(--accent)}
-.row{display:flex;justify-content:space-between;font-size:13px;color:var(--mute);margin-bottom:8px}
-.row b{color:var(--text)}
-.list{max-height:230px;overflow:auto;display:flex;flex-direction:column;gap:4px}
-.item{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:9px;font-size:13px;cursor:default;transition:.12s}
-.item:hover,.item.hl{background:#ffffff12}
-.item i{width:10px;height:10px;border-radius:3px}
-.item span{margin-left:auto;color:var(--mute);font-variant-numeric:tabular-nums}
-.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(30px);background:#ff5d73;color:#fff;padding:12px 18px;border-radius:12px;
-  font-weight:600;font-size:14px;opacity:0;pointer-events:none;transition:.3s;z-index:9}
-.toast.on{opacity:1;transform:translateX(-50%)}
-footer{margin-top:26px;text-align:center;color:var(--mute);font-size:12px}
+.list{display:flex;flex-direction:column;gap:2px}
+.item{display:flex;align-items:center;gap:10px;padding:7px 9px;border-radius:10px;font-size:13px;cursor:default}
+.item:hover,.item.hl{background:rgba(255,255,255,.08)}
+.item i{width:9px;height:9px;border-radius:50%}
+.item span{margin-left:auto;color:var(--mute)}
+.section+.section{margin-top:18px}
+
+/* dock: compact, centred on wide screens */
+@media (min-width:1024px){.dock{left:50%;right:auto;transform:translateX(-50%);display:flex;align-items:center;gap:14px;padding:10px 10px 10px 18px}}
+.dock .meta{font-size:12.5px;color:var(--mute);white-space:nowrap}
+.dock .meta b{color:var(--text)}
+.dock .acts{display:flex;gap:8px;flex-wrap:wrap}
+@media (max-width:1023px){.dock{display:flex;flex-direction:column;gap:10px;align-items:flex-start}}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
+<div class="app s-empty" id="app">
+  <div class="media" id="media">
+    <img id="img" alt="Uploaded road scene">
+    <canvas class="ov" id="ov"></canvas>
+    <div id="handle"></div>
+    <div class="scan" id="scan"></div>
+    <div class="shade"></div>
+    <div class="vignette" id="vig"></div>
+    <div class="busytag glass" id="busytag">Detecting road users...</div>
+  </div>
+
+  <header class="topbar glass">
     <div class="brand">
-      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#04121c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.6-6.5 9-6.5S21 12 21 12s-3.6 6.5-9 6.5S3 12 3 12z"/><circle cx="12" cy="12" r="2.6"/></svg></div>
-      <h1>DriveSight<small>See the road, protect the vulnerable.</small></h1>
+      <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12s3.6-6.5 9-6.5S21 12 21 12s-3.6 6.5-9 6.5S3 12 3 12z"/><circle cx="12" cy="12" r="2.6"/></svg></div>
+      <div><b>DriveSight</b><span>See the road, protect the vulnerable</span></div>
     </div>
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-      <div class="seg" id="models" role="group" aria-label="Model"></div>
-      <span class="pill" id="theme" title="Switch theme">Theme</span>
-      <span class="pill" id="dev">Device: <b>-</b></span>
-    </div>
+    <button class="btn" type="button" data-ourwork title="How DriveSight was built and how well it works">Our work</button>
+    <div class="seg nav" role="navigation" aria-label="Page"><button type="button" class="on" aria-current="page">Photo</button><button type="button" onclick="location.href='/video'" title="Risk timeline on a driving video">Video</button></div>
+    <div class="seg" id="models" role="group" aria-label="Detector"></div>
+    <span class="chip-dev" id="dev">Device <b>-</b></span>
   </header>
 
-  <div id="drop" tabindex="0" role="button" aria-label="Upload a road photo">
-    <div class="road"><div class="lane"></div></div>
-    <div class="dropin">
-      <div class="drop-ic"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#2ee6a6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4m0 0l-4 4m4-4l4 4"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg></div>
-      <h2>Drop a road photo here</h2>
-      <p>or click to browse, or paste with <kbd>Ctrl</kbd> + <kbd>V</kbd><br>JPG, PNG or WebP, up to 15 MB. Your image stays on this computer.</p>
-      <div class="btnrow"><button class="btn primary" id="pick" type="button">Choose a photo</button></div>
-      <p class="hint" id="modelhint"></p>
+  <section class="hero" id="hero" tabindex="0" aria-label="Upload a road photo">
+    <div class="card glass">
+      <div class="ic"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#a9b4ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg></div>
+      <h2>Drop a road photo</h2>
+      <p>DriveSight finds cars, trucks, signs and lights, and highlights pedestrians, riders, motorcycles and bicycles.</p>
+      <div class="actions"><button class="btn primary" id="pick" type="button">Choose a photo</button><span class="row" style="margin:0">or paste with <kbd>Ctrl</kbd> + <kbd>V</kbd></span></div>
+      <div class="small">JPG, PNG or WebP, up to 15 MB. The image never leaves this computer.</div>
+        <div class="kpis">
+          <div><b>YOLOv8s</b><span>detector selected out of 3</span></div>
+          <div><b class="num">23.9</b><span>AP50-95 on pedestrians and cyclists</span></div>
+          <div><b class="num">4,260</b><span>BDD100K images, 9 classes</span></div>
+          <div><b class="num">1,161</b><span>BDDA drives for the risk model</span></div>
+        </div>
+        <button class="linkbtn" type="button" data-ourwork>See how we built it</button>
     </div>
     <input type="file" id="file" accept="image/*">
-  </div>
+  </section>
 
-  <div id="result">
-    <div class="stage">
-      <div class="canvaswrap" id="cw">
-        <img id="img" alt="Uploaded road scene">
-        <canvas id="ov"></canvas>
-        <div id="handle"></div>
-        <div class="scan" id="scan"></div>
-      </div>
-      <div class="bar">
-        <div class="meta" id="meta"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn" id="cmp" type="button">Compare with original</button>
-          <button class="btn" id="dl" type="button">Download</button>
-          <button class="btn primary" id="again" type="button">New photo</button>
-        </div>
-      </div>
+  <section class="hud hud-left glass" id="sum" aria-live="polite">
+    <div class="gauge">
+      <svg viewBox="0 0 140 112" aria-hidden="true">
+        <path id="garc" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="11" stroke-linecap="round"/>
+        <path id="gval" fill="none" stroke="#34e0a1" stroke-width="11" stroke-linecap="round" style="filter:drop-shadow(0 0 6px currentColor)"/>
+        <text id="gnum" class="gnum num" x="70" y="78" text-anchor="middle">0.00</text>
+      </svg>
+      <div><div class="glabel" id="glabel">-</div><div class="gsub">Danger in this photo</div></div>
     </div>
-    <div class="panel">
-      <div id="alert"><div class="big" id="abig">-</div><div class="sub" id="asub"></div></div>
-      <div class="card">
+    <ul class="why" id="why"></ul>
+    <div class="sep"></div>
+    <div class="vrurow"><b class="num" id="sbig">-</b><div><div class="lab" id="slab"></div><div class="mini" id="smini"></div></div></div>
+    <p class="hint" style="margin-top:12px">How close road users are to the car's path, from this single photo. Whether the driver will have to brake depends on motion: <a href="/video">analyse a video</a>.</p>
+  </section>
+
+  <aside class="hud hud-right glass">
+    <div class="pane">
+      <div class="section">
         <h3>Confidence</h3>
-        <div class="row" title="Pedestrian, rider, motorcycle, bicycle: a miss costs more than a false alarm"><span>Vulnerable road users</span><b id="cvv">15%</b></div>
+        <div class="row" title="Pedestrian, rider, motorcycle, bicycle: a miss costs more than a false alarm"><span>Vulnerable road users</span><b class="num" id="cvv">15%</b></div>
         <input class="slider" id="confv" type="range" min="5" max="95" value="15" aria-label="Confidence threshold for vulnerable road users">
-        <div class="row" style="margin-top:14px" title="Car, truck, bus, traffic light, traffic sign: the project reference value, 25%"><span>Other objects</span><b id="cvo">25%</b></div>
+        <div class="row" style="margin-top:12px" title="Car, truck, bus, traffic light, traffic sign"><span>Other objects</span><b class="num" id="cvo">25%</b></div>
         <input class="slider" id="confo" type="range" min="5" max="95" value="25" aria-label="Confidence threshold for other objects">
-        <p class="hint">Vulnerable road users (pedestrian, rider, motorcycle, bicycle) get a lower default so fewer are missed, at the cost of
-          more false alarms; expect extra pedestrian alerts and some riders labelled as pedestrians. These are demo settings, not an
-          evaluated profile for this model. Below 5% nothing is returned.</p>
+        <p class="hint">Vulnerable road users get a lower default so fewer are missed, at the cost of more false alarms. Demo settings, not an evaluated profile. The model runs once; the sliders only choose what is shown.</p>
       </div>
-      <div class="card"><h3>Classes</h3><div class="chips" id="chips"></div></div>
-      <div class="card"><h3>Detections</h3><div class="list" id="list"></div></div>
+      <div class="section"><h3>Classes</h3><div class="chips" id="chips"></div></div>
+      <div class="section"><h3>Detections</h3><div class="list" id="list"></div></div>
     </div>
-  </div>
-  <footer>YOLOv8s trained on BDD100K (V2). A research demo, not a safety system.<br>Confidence: the model runs once; the sliders only choose which detections to show.</footer>
+  </aside>
+
+  <section class="dock glass">
+    <div class="meta num" id="meta"></div>
+    <div class="acts">
+      <button class="btn" id="cmp" type="button">Compare with original</button>
+      <button class="btn" id="dl" type="button">Download</button>
+      <button class="btn" id="hud" type="button" aria-pressed="false" title="Hide the panels to see the whole image (H)">Hide panels</button>
+      <button class="btn primary" id="again" type="button">New photo</button>
+    </div>
+  </section>
 </div>
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="alert"></div>
 
 <script>
 const $ = s => document.querySelector(s);
 const COLORS = {pedestrian:"#ff5d73", rider:"#ff9f43", motorcycle:"#feca57", bicycle:"#ff6bcb",
   car:"#4cc9f0", truck:"#4895ef", bus:"#7b6cf6", "traffic light":"#2ee6a6", "traffic sign":"#a0e86f"};
 const VRU = new Set(["pedestrian","rider","motorcycle","bicycle"]);
-let state = {model:"yolov8s", data:null, confV:.15, confO:.25, hidden:new Set(), hl:-1, split:1, compare:false, url:null};
-
-/* ---------- theme ---------- */
-const root = document.documentElement;
-try{const t=localStorage.getItem("ds-theme"); if(t) root.dataset.theme=t;}catch(e){}
-$("#theme").onclick = () => {
-  const dark = root.dataset.theme ? root.dataset.theme==="dark" : !matchMedia("(prefers-color-scheme: light)").matches;
-  root.dataset.theme = dark ? "light" : "dark";
-  try{localStorage.setItem("ds-theme", root.dataset.theme);}catch(e){}
-};
+let state = {model:"yolov8s", data:null, confV:.15, confO:.25, hidden:new Set(), hl:-1, split:1, compare:false, url:null, file:null, rect:null};
+const app = $("#app"), setState = s => { app.classList.remove("s-empty","s-busy","s-result"); app.classList.add("s-"+s); };
 
 /* ---------- models ---------- */
 fetch("/api/models").then(r=>r.json()).then(m=>{
   $("#dev b").textContent = m.device; state.model = m.default;
   const box = $("#models");
   m.models.filter(x=>x.available).forEach(x=>{
-    const b = document.createElement("button"); b.textContent = x.label; b.dataset.k = x.key; b.title = x.note;
+    const b = document.createElement("button"); b.type = "button"; b.textContent = x.label; b.dataset.k = x.key; b.title = x.note;
     b.onclick = () => { state.model = x.key; mark(); if(state.file) run(state.file); };
     box.appendChild(b);
   });
-  window._models = m.models;
-  function mark(){
-    box.querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.k===state.model));
-    const cur = m.models.find(x=>x.key===state.model); $("#modelhint").textContent = cur ? cur.label + ": " + cur.note : "";
-  }
-  window._mark = mark; mark();
-}).catch(()=>toast("Cannot reach the DriveSight server"));
+  function mark(){ box.querySelectorAll("button").forEach(b=>b.classList.toggle("on", b.dataset.k===state.model)); }
+  mark();
+}).catch(()=>toast("The DriveSight server is not reachable. Start it with: python -m uvicorn app.server:app"));
 
 /* ---------- upload ---------- */
-const drop = $("#drop"), fileIn = $("#file");
-drop.onclick = e => { if(e.target.id!=="pick") fileIn.click(); };
+const hero = $("#hero"), fileIn = $("#file");
+hero.onclick = e => { if(e.target.closest("[data-ourwork]")) return; if(e.target.id!=="pick") fileIn.click(); };
 $("#pick").onclick = () => fileIn.click();
-drop.onkeydown = e => { if(e.key==="Enter"||e.key===" ") fileIn.click(); };
+hero.onkeydown = e => { if((e.key==="Enter"||e.key===" ") && e.target===hero){ e.preventDefault(); fileIn.click(); } };
 fileIn.onchange = () => fileIn.files[0] && run(fileIn.files[0]);
-["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over")}));
-["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over")}));
-drop.addEventListener("drop", e => { const f=e.dataTransfer.files[0]; f && run(f); });
-window.addEventListener("dragover", e=>e.preventDefault());
-window.addEventListener("drop", e=>{ e.preventDefault(); const f=e.dataTransfer.files[0]; if(f && !drop.contains(e.target)) run(f); });
+["dragenter","dragover"].forEach(ev=>window.addEventListener(ev,e=>{e.preventDefault(); hero.classList.add("over");}));
+["dragleave","drop"].forEach(ev=>window.addEventListener(ev,e=>{e.preventDefault(); hero.classList.remove("over");}));
+window.addEventListener("drop", e => { const f=e.dataTransfer.files[0]; f && run(f); });
 window.addEventListener("paste", e => { for(const it of e.clipboardData.items) if(it.type.startsWith("image/")) { run(it.getAsFile()); break; } });
 
+const img = $("#img"), ov = $("#ov"), ctx = ov.getContext("2d"), media = $("#media");
 async function run(file){
-  if(!file.type.startsWith("image/")) return toast("Please choose an image file");
+  if(!file.type.startsWith("image/")) return toast("This is not an image. Choose a JPG, PNG or WebP photo.");
   state.file = file;
   if(state.url) URL.revokeObjectURL(state.url);
   state.url = URL.createObjectURL(file);
-  $("#img").src = state.url;
-  drop.style.display = "none"; $("#result").style.display = "grid";
-  $("#scan").classList.add("on"); state.data = null; state.compare = false; $("#cmp").textContent = "Compare with original"; $("#handle").style.display="none"; clearOv();
-  $("#abig").textContent = "Analysing..."; $("#asub").textContent = "Running " + (state.model||"") + " on your photo";
+  img.src = state.url; await img.decode().catch(()=>{});
+  state.data = null; state.compare = false; $("#cmp").textContent = "Compare with original"; $("#cmp").classList.remove("on");
+  setState("busy"); layout(); ctx.clearRect(0,0,ov.width,ov.height);
+  $("#busytag").textContent = "Detecting road users with " + ($("#models .on")?.textContent || "the detector") + "...";
   const fd = new FormData(); fd.append("file", file); fd.append("model", state.model);
   try{
     const r = await fetch("/api/detect", {method:"POST", body:fd});
-    if(!r.ok){ const j = await r.json().catch(()=>({})); throw new Error(j.detail || "detection failed"); }
+    if(!r.ok){ const j = await r.json().catch(()=>({})); throw new Error(j.detail || "The detection failed."); }
     state.data = await r.json();
-    await $("#img").decode().catch(()=>{});
-    state.hidden.clear(); state.hl=-1; render(true);
+    state.hidden.clear(); state.hl = -1; setState("result"); layout(); render(true);
   }catch(err){ toast(err.message); reset(); }
-  finally{ $("#scan").classList.remove("on"); }
 }
 
+/* overlay, scan and compare handle sit exactly on the displayed (letterboxed) image */
+function layout(){
+  const W = img.naturalWidth || 1, H = img.naturalHeight || 1, m = media.getBoundingClientRect();
+  const k = Math.min(m.width/W, m.height/H), w = W*k, h = H*k, x = (m.width-w)/2, y = (m.height-h)/2;
+  for(const el of [ov, $("#scan")]) Object.assign(el.style, {left:x+"px", top:y+"px", width:w+"px", height:h+"px"});
+  state.rect = {x, y, w, h};
+  const dw = state.data ? state.data.width : W, dh = state.data ? state.data.height : H;
+  if(ov.width!==dw || ov.height!==dh){ ov.width = dw; ov.height = dh; }
+  applySplit();
+}
+window.addEventListener("resize", ()=>{ if(!app.classList.contains("s-empty")){ layout(); render(false); } });
+
 /* ---------- rendering ---------- */
-const ov = $("#ov"), ctx = ov.getContext("2d");
-function clearOv(){ ctx.clearRect(0,0,ov.width,ov.height); }
 const thr = name => VRU.has(name) ? state.confV : state.confO;
 function visible(){ return state.data.detections.map((d,i)=>({...d,i})).filter(d=>d.conf>=thr(d.name) && !state.hidden.has(d.name)); }
-let t0 = 0;
 function render(animate){
   if(!state.data) return;
-  const W = state.data.width, H = state.data.height; ov.width = W; ov.height = H;
-  const dets = visible(), lw = Math.max(2, Math.round(Math.max(W,H)/420)), fs = Math.max(13, Math.round(Math.max(W,H)/70));
-  const draw = (prog) => {
+  const W = state.data.width, H = state.data.height;
+  const dets = visible(), lw = Math.max(2, Math.round(Math.max(W,H)/420)), fs = Math.max(12, Math.round(Math.max(W,H)/92));
+  const draw = prog => {
     ctx.clearRect(0,0,W,H);
     dets.forEach((d,k)=>{
-      const p = animate ? Math.min(1, Math.max(0, prog*dets.length/ (k+1) - .0)) : 1;
       const a = animate ? Math.min(1, Math.max(0, prog*1.6 - k/Math.max(dets.length,1)*.6)) : 1;
       if(a<=0) return;
       const [x1,y1,x2,y2] = d.box, x = x1*W, y = y1*H, w = (x2-x1)*W, h = (y2-y1)*H, c = COLORS[d.name]||"#fff";
-      const hl = state.hl===d.i, vru = VRU.has(d.name);
-      ctx.globalAlpha = (state.hl>=0 && !hl) ? .35*a : a;
-      ctx.lineWidth = hl ? lw*2 : lw; ctx.strokeStyle = c; ctx.fillStyle = c + (hl?"44":"1c");
-      if(vru){ ctx.shadowColor = c; ctx.shadowBlur = lw*5; }
-      ctx.beginPath(); ctx.roundRect(x,y,w,h,Math.min(10,lw*3)); ctx.fill(); ctx.stroke(); ctx.shadowBlur = 0;
+      const hl = state.hl===d.i, v = VRU.has(d.name), L = Math.min(w,h)*0.28;
+      ctx.globalAlpha = (state.hl>=0 && !hl) ? .3*a : a;
+      ctx.lineWidth = hl ? lw*2.2 : v ? lw*1.5 : lw; ctx.strokeStyle = c; ctx.lineCap = "round";
+      if(v || hl){ ctx.shadowColor = c; ctx.shadowBlur = lw*6; ctx.fillStyle = c + (hl ? "40" : "22"); ctx.beginPath(); ctx.roundRect(x,y,w,h,Math.min(8,lw*3)); ctx.fill(); }
+      ctx.beginPath();
+      ctx.moveTo(x, y+L); ctx.lineTo(x, y); ctx.lineTo(x+L, y);
+      ctx.moveTo(x+w-L, y); ctx.lineTo(x+w, y); ctx.lineTo(x+w, y+L);
+      ctx.moveTo(x+w, y+h-L); ctx.lineTo(x+w, y+h); ctx.lineTo(x+w-L, y+h);
+      ctx.moveTo(x+L, y+h); ctx.lineTo(x, y+h); ctx.lineTo(x, y+h-L);
+      ctx.stroke(); ctx.shadowBlur = 0;
       const tag = d.name + " " + Math.round(d.conf*100) + "%";
-      ctx.font = "700 "+fs+"px Inter,Segoe UI,sans-serif"; const tw = ctx.measureText(tag).width+fs*.9, th = fs*1.55;
-      const ty = y - th < 0 ? y : y - th;
-      ctx.fillStyle = c; ctx.beginPath(); ctx.roundRect(x, ty, tw, th, 6); ctx.fill();
-      ctx.fillStyle = "#04121c"; ctx.textBaseline = "middle"; ctx.fillText(tag, x+fs*.45, ty+th/2+1);
+      ctx.font = "650 "+fs+"px Segoe UI Variable Text,Inter,sans-serif";
+      const tw = ctx.measureText(tag).width+fs*.9, th = fs*1.5, ty = y-th-4<0 ? y+4 : y-th-4;
+      ctx.fillStyle = "rgba(6,10,18,.75)"; ctx.beginPath(); ctx.roundRect(x, ty, tw, th, th/2); ctx.fill();
+      ctx.fillStyle = c; ctx.textBaseline = "middle"; ctx.fillText(tag, x+fs*.45, ty+th/2+1);
     });
     ctx.globalAlpha = 1;
   };
-  if(animate){ const start = performance.now(); const step = now => { const p = Math.min(1,(now-start)/650); draw(p); if(p<1) requestAnimationFrame(step); }; requestAnimationFrame(step); }
-  else draw(1);
-  applySplit(); panel(dets);
+  if(animate && !matchMedia("(prefers-reduced-motion: reduce)").matches){
+    const start = performance.now(); const stepf = now => { const p = Math.min(1,(now-start)/650); draw(p); if(p<1) requestAnimationFrame(stepf); }; requestAnimationFrame(stepf);
+  } else draw(1);
+  panel(dets);
 }
 function panel(dets){
   const all = state.data.detections.filter(d=>d.conf>=thr(d.name));
-  const vru = dets.filter(d=>VRU.has(d.name));
-  const al = $("#alert"); al.className = vru.length ? "vru" : "clear";
-  if(vru.length){
-    const n = {}; vru.forEach(d=>n[d.name]=(n[d.name]||0)+1);
-    $("#abig").textContent = vru.length + " vulnerable road user" + (vru.length>1?"s":"");
-    $("#asub").textContent = Object.entries(n).map(([k,v])=>v+" "+k+(v>1?"s":"")).join(", ") + " detected";
-  }else{
-    $("#abig").textContent = dets.length ? "No vulnerable road users" : "Nothing detected";
-    $("#asub").textContent = dets.length ? dets.length + " object" + (dets.length>1?"s":"") + " found (vehicles, signs)" : "Try lowering the confidence sliders";
-  }
+  const vru = dets.filter(d=>VRU.has(d.name)), sum = $("#sum");
+  const dg = state.data.danger || {score:0, level:"lo", reasons:[]};
+  sum.className = "hud hud-left glass " + dg.level;
+  $("#vig").className = "vignette" + (dg.level==="hi" ? " on" : vru.length ? " on warn" : "");
+  drawGauge(dg);
+  const n = {}; vru.forEach(d=>n[d.name]=(n[d.name]||0)+1);
+  $("#sbig").textContent = vru.length; $(".vrurow").classList.toggle("has", vru.length>0);
+  $("#slab").textContent = vru.length ? "vulnerable road user" + (vru.length>1?"s":"") + " in view" : "no vulnerable road user in view";
+  $("#smini").innerHTML = Object.entries(n).map(([k,v])=>`<span style="border-color:${COLORS[k]}66">${v} ${k}${v>1?"s":""}</span>`).join("");
   const cnt = {}; all.forEach(d=>cnt[d.name]=(cnt[d.name]||0)+1);
   $("#chips").innerHTML = ""; Object.keys(COLORS).filter(k=>cnt[k]).forEach(k=>{
-    const b = document.createElement("button"); b.className = "chip"+(VRU.has(k)?" vru":"")+(state.hidden.has(k)?" off":"");
-    b.innerHTML = `<i style="background:${COLORS[k]}"></i>${k} <em>${cnt[k]}</em>`;
+    const b = document.createElement("button"); b.type = "button"; b.className = "chip"+(state.hidden.has(k)?" off":"");
+    b.innerHTML = `<i style="background:${COLORS[k]};color:${COLORS[k]}"></i>${k} <em>${cnt[k]}</em>`;
+    b.setAttribute("aria-pressed", !state.hidden.has(k));
     b.onclick = () => { state.hidden.has(k) ? state.hidden.delete(k) : state.hidden.add(k); render(false); };
     $("#chips").appendChild(b);
   });
+  if(!Object.keys(cnt).length) $("#chips").innerHTML = '<span class="hint" style="margin:0">No class above the thresholds.</span>';
   $("#list").innerHTML = "";
   dets.forEach(d=>{
     const el = document.createElement("div"); el.className = "item"+(state.hl===d.i?" hl":"");
-    el.innerHTML = `<i style="background:${COLORS[d.name]}"></i>${d.name}<span>${Math.round(d.conf*100)}%</span>`;
+    el.innerHTML = `<i style="background:${COLORS[d.name]}"></i>${d.name}<span class="num">${Math.round(d.conf*100)}%</span>`;
     el.onmouseenter = () => { state.hl = d.i; render(false); }; el.onmouseleave = () => { state.hl = -1; render(false); };
     $("#list").appendChild(el);
   });
-  $("#meta").innerHTML = `<b>${state.data.model}</b> &middot; ${state.data.ms.toFixed(0)} ms &middot; ${state.data.width}&times;${state.data.height}`;
+  $("#meta").innerHTML = `<b>${state.data.model}</b>, ${state.data.ms.toFixed(0)} ms, ${state.data.width}&times;${state.data.height}`;
+}
+const G = {cx:70, cy:66, r:52, a0:-210, a1:30};
+const pt = a => [G.cx + G.r*Math.cos(a*Math.PI/180), G.cy + G.r*Math.sin(a*Math.PI/180)];
+function arc(a, b){ const [x0,y0] = pt(a), [x1,y1] = pt(b); return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${G.r} ${G.r} 0 ${b-a>180?1:0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`; }
+function drawGauge(dg){
+  const col = dg.level==="hi" ? "#ff4d6a" : dg.level==="mid" ? "#ffb547" : "#34e0a1";
+  $("#garc").setAttribute("d", arc(G.a0, G.a1));
+  const g = $("#gval"); g.setAttribute("d", arc(G.a0, G.a0 + (G.a1-G.a0)*Math.max(dg.score, 0.003))); g.setAttribute("stroke", col); g.style.color = col;
+  $("#gnum").textContent = dg.score.toFixed(2);
+  $("#glabel").textContent = dg.level==="hi" ? "High danger" : dg.level==="mid" ? "Moderate" : "Low danger";
+  const why = $("#why"); why.innerHTML = "";
+  const items = (dg.reasons||[]).map(r=>r[0].toUpperCase()+r.slice(1));
+  if(!items.length){ const li = document.createElement("li"); li.className = "calm"; li.textContent = "Nothing close to the path"; why.appendChild(li); }
+  items.forEach(t=>{ const li = document.createElement("li"); li.textContent = t; why.appendChild(li); });
 }
 $("#confv").oninput = e => { state.confV = e.target.value/100; $("#cvv").textContent = e.target.value+"%"; render(false); };
 $("#confo").oninput = e => { state.confO = e.target.value/100; $("#cvo").textContent = e.target.value+"%"; render(false); };
 
 /* ---------- compare slider ---------- */
 function applySplit(){
+  const r = state.rect, h = $("#handle");
   ov.style.clipPath = state.compare ? `inset(0 0 0 ${state.split*100}%)` : "none";
-  $("#handle").style.display = state.compare ? "block" : "none";
-  $("#handle").style.left = state.split*100+"%";
+  h.style.display = state.compare && r ? "block" : "none";
+  if(r) Object.assign(h.style, {left:(r.x + state.split*r.w)+"px", top:r.y+"px", height:r.h+"px"});
 }
-$("#cmp").onclick = () => { state.compare = !state.compare; state.split = .5; $("#cmp").textContent = state.compare ? "Hide comparison" : "Compare with original"; applySplit(); };
-const cw = $("#cw"); let drag = false;
-const move = e => { const r = cw.getBoundingClientRect(); state.split = Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)); applySplit(); };
-$("#handle").addEventListener("pointerdown", e=>{drag=true; e.target.setPointerCapture(e.pointerId);});
+$("#cmp").onclick = () => { state.compare = !state.compare; state.split = .5; $("#cmp").textContent = state.compare ? "Hide comparison" : "Compare with original"; $("#cmp").classList.toggle("on", state.compare); applySplit(); };
+let drag = false;
+const move = e => { const r = state.rect, m = media.getBoundingClientRect(); state.split = Math.min(1,Math.max(0,(e.clientX - m.left - r.x)/r.w)); applySplit(); };
+$("#handle").addEventListener("pointerdown", e=>{ drag = true; e.target.setPointerCapture(e.pointerId); });
 window.addEventListener("pointermove", e=>{ if(drag) move(e); }); window.addEventListener("pointerup", ()=>drag=false);
 
 /* ---------- actions ---------- */
 $("#dl").onclick = () => {
-  const c = document.createElement("canvas"), im = $("#img"); c.width = state.data.width; c.height = state.data.height;
-  const x = c.getContext("2d"); x.drawImage(im,0,0,c.width,c.height); x.drawImage(ov,0,0);
+  const c = document.createElement("canvas"); c.width = state.data.width; c.height = state.data.height;
+  const x = c.getContext("2d"); x.drawImage(img,0,0,c.width,c.height); x.drawImage(ov,0,0);
   const a = document.createElement("a"); a.download = "drivesight_result.png"; a.href = c.toDataURL("image/png"); a.click();
 };
-function reset(){ $("#result").style.display = "none"; drop.style.display = "grid"; fileIn.value = ""; state.file = null; }
+function reset(){ setState("empty"); fileIn.value = ""; state.file = null; state.data = null; state.compare = false; applySplit(); $("#vig").className = "vignette"; img.removeAttribute("src"); }
 $("#again").onclick = reset;
-let tt; function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove("on"),3800); }
+const toggleHud = () => { const on = app.classList.toggle("nohud"); $("#hud").textContent = on ? "Show panels" : "Hide panels"; $("#hud").setAttribute("aria-pressed", on); $("#hud").classList.toggle("on", on); };
+$("#hud").onclick = toggleHud;
+document.addEventListener("keydown", e=>{ if((e.key==="h"||e.key==="H") && app.classList.contains("s-result") && !e.target.matches("input") && !document.querySelector(".ow-back.on")) toggleHud(); });
+let tt; function toast(m){ const t=$("#toast"); t.textContent=m; t.classList.add("on"); clearTimeout(tt); tt=setTimeout(()=>t.classList.remove("on"),4500); }
 </script>
+<script src="/static/ourwork.js"></script>
 </body>
 </html>
