@@ -83,9 +83,10 @@ training seed per model, validation used for both checkpoint choice and comparis
 ```text
 notebooks/drivesight_v2/   master notebook + the two data notebooks (01, 02)
 notebooks/                 07 resolution-ablation notebook, convert_to_yolo.py (V1 tooling the report cites)
-app/                       demo web app (FastAPI server + single-page interface)
+app/                       demo web app (FastAPI server, photo page, video risk page)
 configs/                   v2_data.yaml, v2_train_recipe.yaml
-src/features/              dataset conversion & preprocessing utilities (convert_bdd100k_to_yolo.py, preprocessing.py, verification.py)
+src/features/              dataset conversion & preprocessing utilities (BDD100K -> YOLO, BDDA video/gaze/GPS preprocessing)
+src/risk/                  risk model: GPS braking labels, frame features, rule baseline, learned model (see its README)
 weights/final/             the three final best.pt files; weights/*.pt pretrained starts are downloaded
 reports/                   metrics, figures and written reports behind every notebook section (local only, git-ignored)
 runs/drivesight_v2/        per-run args.yaml, results.csv (checkpoints and plots stay local)
@@ -121,6 +122,11 @@ python -m uvicorn app.server:app --host 127.0.0.1 --port 8000     # from the rep
   highlight and an alert card.
 - Switch between **YOLOv8s** (selected), YOLO11s and YOLO11n, move the two confidence sliders (vulnerable road users default to 15%, other objects to 25%; a demo setting, not an evaluated profile), hide classes, hover a detection
   to find it in the image, compare with the original, and download the annotated image.
+- **Video risk page** (`http://127.0.0.1:8000/video`, or the Photo / Video switch): drop a driving video (up to 60 s) and get a
+  per-frame risk timeline (hard braking likely within 2 s) with the detections drawn on the video, an adjustable alarm threshold
+  and the list of alerts. It uses the learned objects + motion model `data/risk/risk_model_vision.joblib` once
+  `src/risk/train_risk_model.py` has produced it, and the rule-based score of `src/risk/rule_baseline.py` until then
+  (see [`src/risk/README.md`](src/risk/README.md)). The video is written to a temporary file for decoding and deleted right after.
 - Images are processed in memory and never saved; the server listens on `127.0.0.1` only. Weights come from `weights/final/`.
 - It is a research demo, not a safety system. The detection settings are those of the V2 evaluation (imgsz 1152, NMS IoU 0.70).
 
