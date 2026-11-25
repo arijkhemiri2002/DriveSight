@@ -294,3 +294,22 @@ def test_broken_video_is_isolated(tmp_path):
     assert set(a["video_id"]) == {"6"}                    # the broken one is excluded from the merge
     from src.features import verify_preprocessing as vp
     assert vp.main(args[:6] + ["--out", str(tmp_path / "v.md")]) == 1   # and the verifier reports it
+
+
+def test_bar_mass_fraction():
+    cfg = PreprocessConfig()
+    img = np.zeros((768, 1024), np.uint8)
+    img[300:340, 500:540] = 200          # 1600 px inside the crop
+    img[80:96, 500:540] = 200            # 640 px in the top bar, touching the boundary
+    d = gaze_descriptors(cv2.cvtColor(img, cv2.COLOR_GRAY2BGR), cfg)
+    assert d["gaze_bar_mass_frac"] == pytest.approx(640 / 2240, abs=1e-4)
+    assert d["gaze_bar_max"] == 200
+
+
+def test_gaze_bar_diagnostic_runs(dataset, tmp_path):
+    from src.features import gaze_bar_diagnostic as gb
+    assert gb.main(["--bdda-root", str(dataset["bdda"]), "--manifest", str(dataset["manifest"]),
+                    "--out-dir", str(tmp_path), "--n-random", "1"]) == 0
+    assert "Verdict: A" in (tmp_path / "gaze_bar_diagnostic.md").read_text()
+    pytest.importorskip("matplotlib")
+    assert (tmp_path / "gaze_bar_diagnostic.png").exists()

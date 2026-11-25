@@ -42,7 +42,7 @@ class Report:
 
     def check(self, ok: bool, label: str, detail: str = "") -> None:
         self.failures += int(not ok)
-        self.lines.append(f"- {'PASS' if ok else '**FAIL**'} — {label}" + (f": {detail}" if detail else ""))
+        self.lines.append(f"- {'PASS' if ok else '**FAIL**'} - {label}" + (f": {detail}" if detail else ""))
 
     def info(self, text: str) -> None:
         self.lines.append(text)
@@ -87,7 +87,7 @@ def main(argv=None) -> int:
     scope = "pilot" if a.pilot else ("custom" if (a.split or a.videos) else "full")
     h = cfg.output_hash()
     rep = Report()
-    rep.info(f"# Phase 2 verification — {scope}")
+    rep.info(f"# Phase 2 verification - {scope}")
     rep.info("")
     rep.info(f"Config hash `{h}` | sequences in scope: {len(sel)} {sel['split'].value_counts().to_dict()}")
     rep.info("")
@@ -121,7 +121,7 @@ def main(argv=None) -> int:
         for vid, st in status.items():
             if st in ("problem", "failed"):
                 ck = cks[vid]
-                rep.info(f"  - {vid}: {st} — {'; '.join(ck.get('problems', [])) or ck.get('error', '')}")
+                rep.info(f"  - {vid}: {st} - {'; '.join(ck.get('problems', [])) or ck.get('error', '')}")
 
         ap_path = cfg.aligned_records_path(split)
         if not ap_path.exists():
@@ -184,6 +184,11 @@ def main(argv=None) -> int:
         n_inv = int((df["gps_matched"].astype(bool) & ~df["gps_speed_valid"].astype(bool)).sum())
         n_unm = int((~df["gps_matched"].astype(bool)).sum())
         n_empty = int(df["gaze_empty"].astype(bool).sum())
+        bf = df["gaze_bar_mass_frac"] if "gaze_bar_mass_frac" in df else pd.Series(dtype=float)
+        rep.check("gaze_bar_mass_frac" in df, "schema 2.1 columns present (gaze_bar_mass_frac)")
+        rep.info(f"- info: gaze mass in cropped-out bars: mean {bf.mean():.4f}, p99 {bf.quantile(0.99):.4f}, "
+                 f"max {bf.max():.4f}; rows > {cfg.gaze_bar_mass_warn:.0%}: {int((bf > cfg.gaze_bar_mass_warn).sum())} "
+                 f"({df.loc[bf > cfg.gaze_bar_mass_warn, 'video_id'].nunique()} sequences)")
         rep.info(f"- info: rows {len(df)}, rows with invalid speed {n_inv} "
                  f"({df.loc[df['gps_matched'].astype(bool) & ~df['gps_speed_valid'].astype(bool), 'video_id'].nunique()} sequences), "
                  f"rows without GPS {n_unm}, empty gaze rows {n_empty}, "

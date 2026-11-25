@@ -226,8 +226,12 @@ def process_sequence(row: pd.Series, cfg: PreprocessConfig, force_qc: bool = Fal
     if n_empty:
         warnings.append(f"{n_empty} empty gaze frames")
     bar_max = int(np.nanmax(df["gaze_bar_max"])) if len(df) and df["gaze_bar_max"].notna().any() else 0
-    if bar_max > cfg.gaze_empty_max:
-        warnings.append(f"gaze signal in cropped-out bars (max {bar_max})")
+    bar_frac = df["gaze_bar_mass_frac"] if len(df) else pd.Series(dtype=float)
+    bar_frac_max = float(bar_frac.max()) if bar_frac.notna().any() else 0.0
+    n_bar_rows = int((bar_frac > cfg.gaze_bar_mass_warn).sum())
+    if n_bar_rows:
+        warnings.append(f"{n_bar_rows} rows with >{cfg.gaze_bar_mass_warn:.0%} of gaze mass in the "
+                        f"cropped-out bars (max {bar_frac_max:.1%})")
 
     stats = {
         "n_rows": len(df),
@@ -244,6 +248,9 @@ def process_sequence(row: pd.Series, cfg: PreprocessConfig, force_qc: bool = Fal
         "max_gps_gap_sec": _r(df["gps_gap_sec"].max()) if len(df) else None,
         "n_rows_speed_invalid": int((df["gps_matched"].astype(bool) & ~df["gps_speed_valid"].astype(bool)).sum()) if len(df) else 0,
         "n_gaze_empty_rows": n_empty, "gaze_bar_max": bar_max,
+        "gaze_bar_mass_frac_max": round(bar_frac_max, 5),
+        "gaze_bar_mass_frac_mean": round(float(bar_frac.mean()), 5) if bar_frac.notna().any() else 0.0,
+        "n_rows_bar_mass_over_warn": n_bar_rows,
         **track.stats,
         "problems": problems, "warnings": warnings,
         "elapsed_sec": round(time.perf_counter() - t0, 3),

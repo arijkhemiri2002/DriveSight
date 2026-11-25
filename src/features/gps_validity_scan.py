@@ -133,7 +133,7 @@ def main(argv=None) -> int:
     lines += ["", "Handling in the pipeline: invalid values are set to NaN with a *_valid flag; "
               "acceleration is only computed between two valid consecutive records."]
     (out_dir / "gps_validity_scan.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print("\n".join(lines[:20 + len(issue_cols)]))
+    print("\n".join(lines))
     print(f"\n-> {out_dir / 'gps_validity_scan.csv'}\n-> {out_dir / 'gps_validity_scan.md'}")
     return 0
 

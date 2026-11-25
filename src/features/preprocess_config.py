@@ -19,7 +19,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # Bump when the CSV schema or the meaning of a column changes.
-SCHEMA_VERSION = "2.0"
+SCHEMA_VERSION = "2.1"   # 2.1: gaze_bar_mass_frac; bar warning based on mass, not max
 
 
 @dataclass(frozen=True)
@@ -59,6 +59,8 @@ class PreprocessConfig:
     gaze_intensity_threshold: int = 20
     # A gaze frame whose maximum is <= this value is flagged gaze_empty.
     gaze_empty_max: int = 10
+    # Warn when more than this share of a frame's gaze mass lies in the cropped-out bars.
+    gaze_bar_mass_warn: float = 0.05
 
     # ---- QC --------------------------------------------------------------------
     qc_fraction: float = 0.05          # share of sequences that get one QC overlay

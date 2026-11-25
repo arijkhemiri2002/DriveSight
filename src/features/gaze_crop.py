@@ -205,7 +205,7 @@ DESCRIPTOR_DOWNSCALE = 4   # descriptors computed on a 256x144 copy (precision ~
 GAZE_DESCRIPTOR_COLUMNS = [
     "gaze_max", "gaze_mean", "gaze_active_frac", "gaze_peak_x", "gaze_peak_y",
     "gaze_centroid_x", "gaze_centroid_y", "gaze_spread", "gaze_n_regions",
-    "gaze_empty", "gaze_bar_max",
+    "gaze_empty", "gaze_bar_max", "gaze_bar_mass_frac",
 ]
 
 
@@ -215,9 +215,15 @@ def gaze_descriptors(gaze_frame_bgr: np.ndarray, config: PreprocessConfig) -> di
     crop = gray[top:bot, :]
     bars = np.concatenate([gray[:top, :].ravel(), gray[bot:, :].ravel()])
     gmax = int(crop.max()) if crop.size else 0
+    crop_mass = float(crop.sum(dtype=np.float64))
+    bar_mass = float(bars.sum(dtype=np.float64))
     out = {
         "gaze_max": gmax,
-        "gaze_bar_max": int(bars.max()) if bars.size else 0,   # >0 would mean the crop cuts signal
+        # Signal in the letterbox bars is attention that the crop discards (e.g. heat-map
+        # blur spilling over the top edge of the image). Its share of the total map mass
+        # says how much is lost; the max alone says nothing about the amount.
+        "gaze_bar_max": int(bars.max()) if bars.size else 0,
+        "gaze_bar_mass_frac": round(bar_mass / (bar_mass + crop_mass), 5) if (bar_mass + crop_mass) > 0 else 0.0,
         "gaze_empty": bool(gmax <= config.gaze_empty_max),
     }
     h, w = crop.shape
