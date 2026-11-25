@@ -14,11 +14,8 @@ from typing import Optional
 
 import cv2
 import numpy as np
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 
-from preprocess_config import PreprocessConfig
+from src.features.preprocess_config import PreprocessConfig
 
 
 @dataclass
@@ -77,7 +74,10 @@ def overlay_gaze_on_camera(camera_rgb: np.ndarray,
 def save_qc_triptych(camera_rgb: np.ndarray, gaze_raw_gray: np.ndarray,
                      gaze_crop_resized: np.ndarray, overlay: np.ndarray,
                      out_path: Path, title: str = "") -> None:
-    """Save a 1x3 QC figure: camera | gaze crop | overlay."""
+    """Save a 1x3 QC figure: camera | gaze crop | overlay (matplotlib, pilot-era)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
     axes[0].imshow(camera_rgb)
     axes[0].set_title("Camera")
@@ -189,3 +189,83 @@ def process_gaze_frame(gaze_frame_bgr: np.ndarray, config: PreprocessConfig) -> 
         gaze_crop, config.expected_camera_w, config.expected_camera_h
     )
     return gaze_resized
+
+
+# ----------------------------------------------------------------------------------
+# Compact gaze descriptors (Phase 2 output) and fast QC triptych
+# ----------------------------------------------------------------------------------
+# The BDD-A gaze map is an *aggregate of several in-lab observers* watching the clip
+# (Xia et al., ACCV 2018), smoothed into a heat map. These descriptors summarise that
+# map; they are QC signals and candidate features, NOT a measurement of the recording
+# driver's gaze. Coordinates are normalised to [0, 1] in the cropped 16:9 frame, which
+# maps uniformly (x1.25) onto the 1280x720 camera frame.
+
+DESCRIPTOR_DOWNSCALE = 4   # descriptors computed on a 256x144 copy (precision ~0.4 % of width)
+
+GAZE_DESCRIPTOR_COLUMNS = [
+    "gaze_max", "gaze_mean", "gaze_active_frac", "gaze_peak_x", "gaze_peak_y",
+    "gaze_centroid_x", "gaze_centroid_y", "gaze_spread", "gaze_n_regions",
+    "gaze_empty", "gaze_bar_max",
+]
+
+
+def gaze_descriptors(gaze_frame_bgr: np.ndarray, config: PreprocessConfig) -> dict:
+    gray = cv2.cvtColor(gaze_frame_bgr, cv2.COLOR_BGR2GRAY) if gaze_frame_bgr.ndim == 3 else gaze_frame_bgr
+    top, bot = config.gaze_crop_top, config.gaze_crop_bottom
+    crop = gray[top:bot, :]
+    bars = np.concatenate([gray[:top, :].ravel(), gray[bot:, :].ravel()])
+    gmax = int(crop.max()) if crop.size else 0
+    out = {
+        "gaze_max": gmax,
+        "gaze_bar_max": int(bars.max()) if bars.size else 0,   # >0 would mean the crop cuts signal
+        "gaze_empty": bool(gmax <= config.gaze_empty_max),
+    }
+    h, w = crop.shape
+    small = cv2.resize(crop, (w // DESCRIPTOR_DOWNSCALE, h // DESCRIPTOR_DOWNSCALE),
+                       interpolation=cv2.INTER_AREA).astype(np.float32)
+    sh, sw = small.shape
+    out["gaze_mean"] = round(float(small.mean()), 3)
+    thr = float(config.gaze_intensity_threshold)
+    mask = small > thr
+    out["gaze_active_frac"] = round(float(mask.mean()), 5)
+    if out["gaze_empty"] or not mask.any():
+        out.update(gaze_peak_x=np.nan, gaze_peak_y=np.nan, gaze_centroid_x=np.nan,
+                   gaze_centroid_y=np.nan, gaze_spread=np.nan, gaze_n_regions=0)
+        return out
+    py, px = np.unravel_index(int(np.argmax(small)), small.shape)
+    out["gaze_peak_x"] = round((px + 0.5) / sw, 4)
+    out["gaze_peak_y"] = round((py + 0.5) / sh, 4)
+    wgt = np.clip(small - thr, 0, None)
+    ys, xs = np.mgrid[0:sh, 0:sw]
+    xs = (xs + 0.5) / sw
+    ys = (ys + 0.5) / sh
+    tot = wgt.sum()
+    cx, cy = float((wgt * xs).sum() / tot), float((wgt * ys).sum() / tot)
+    var = float((wgt * ((xs - cx) ** 2 + (ys - cy) ** 2)).sum() / tot)
+    out["gaze_centroid_x"] = round(cx, 4)
+    out["gaze_centroid_y"] = round(cy, 4)
+    out["gaze_spread"] = round(var ** 0.5, 4)          # RMS distance to centroid (normalised units)
+    n, _, stats, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), connectivity=8)
+    min_area = max(1, int(0.001 * sh * sw))            # ignore specks < 0.1 % of the frame
+    out["gaze_n_regions"] = int((stats[1:, cv2.CC_STAT_AREA] >= min_area).sum())
+    return out
+
+
+def make_qc_triptych(camera_bgr: np.ndarray, gaze_frame_bgr: np.ndarray,
+                     config: PreprocessConfig, label: str = "") -> np.ndarray:
+    """camera | gaze (cropped, resized) | overlay, as one BGR image (no matplotlib)."""
+    gaze_resized = process_gaze_frame(gaze_frame_bgr, config)
+    cam_rgb = cv2.cvtColor(camera_bgr, cv2.COLOR_BGR2RGB)
+    overlay = cv2.cvtColor(overlay_gaze_on_camera(cam_rgb, gaze_resized,
+                                                  intensity_threshold=config.gaze_intensity_threshold),
+                           cv2.COLOR_RGB2BGR)
+    pw = config.qc_panel_width
+    ph = int(round(pw * config.expected_camera_h / config.expected_camera_w))
+    panels = [cv2.resize(camera_bgr, (pw, ph), interpolation=cv2.INTER_AREA),
+              cv2.resize(cv2.cvtColor(gaze_resized, cv2.COLOR_GRAY2BGR), (pw, ph), interpolation=cv2.INTER_AREA),
+              cv2.resize(overlay, (pw, ph), interpolation=cv2.INTER_AREA)]
+    img = cv2.hconcat(panels)
+    if label:
+        cv2.rectangle(img, (0, 0), (img.shape[1], 26), (0, 0, 0), -1)
+        cv2.putText(img, label, (8, 19), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1, cv2.LINE_AA)
+    return img

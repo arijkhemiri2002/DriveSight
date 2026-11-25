@@ -1,155 +1,189 @@
 """
-GPS parsing, derived fields, and timestamp-based alignment to video frames.
+GPS parsing, validity filtering, derived fields and timestamp alignment.
 
-GPS timestamps are in milliseconds. Derived fields:
-  time_seconds = (timestamp - startTime) / 1000
-  speed_kmh = speed * 3.6
-  heading_sin / heading_cos = sin/cos(course)
-  acceleration = Δspeed / Δt (using actual timestamp differences)
+BDDA GPS JSON: {"startTime": ms, "endTime": ms, "locations": [{timestamp, speed,
+course, latitude, longitude, accuracy}, ...]} recorded at ~1 Hz by a phone.
+Time base: time_sec = (timestamp - startTime) / 1000, i.e. seconds from video start
+(verified by the Phase 1 audit: first/last records sit ~0.5 s inside the clip).
 
-For each selected video timestamp t, the nearest GPS record is matched if
-|t_gps - t| <= GPS_ASSOC_MAX_GAP_SEC; otherwise gps_missing=True.
+Validity rules (a record can be partially valid):
+  speed_valid    : finite, 0 <= speed <= gps_max_speed_m_s
+                   (iOS reports -1 when speed is unknown; seen in validation/1744)
+  course_valid   : finite, 0 <= course < 360 (iOS reports -1 when unknown)
+  position_valid : finite lat/lon in range, not (0, 0), accuracy >= 0 when present
+Invalid fields become NaN. They are never passed on as real values.
+
+Derived fields:
+  acceleration   : backward difference (v_i - v_{i-1}) / dt between two consecutive
+                   records that both have valid speed and 0 < dt <= gps_accel_max_dt_sec.
+                   It is a 1-second finite difference of phone GPS speed: noisy, and
+                   only a coarse proxy of longitudinal acceleration.
+
+Alignment to a target time t (5 Hz rows vs 1 Hz GPS):
+  * nearest record within gps_assoc_max_gap_sec -> gps_* columns (step function)
+  * gps_speed_interp_m_s: linear interpolation between the two bracketing records
+    with valid speed if they are <= gps_interp_max_span_sec apart; NaN outside the
+    covered interval (no extrapolation).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Optional
-
 import json
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
-from preprocess_config import PreprocessConfig
+from src.features.preprocess_config import PreprocessConfig
+
+GPS_COLUMNS = [
+    "gps_matched", "gps_rec_t_sec", "gps_gap_sec",
+    "gps_speed_m_s", "gps_speed_kmh", "gps_speed_valid", "gps_speed_interp_m_s",
+    "gps_accel_m_s2",
+    "gps_course_deg", "gps_heading_sin", "gps_heading_cos", "gps_course_valid",
+    "gps_lat", "gps_lon", "gps_accuracy_m", "gps_position_valid",
+]
 
 
 @dataclass
-class GpsRecord:
-    time_seconds: float
-    speed_m_s: float
-    speed_kmh: float
-    course: float
-    heading_sin: float
-    heading_cos: float
-    latitude: float
-    longitude: float
-    accuracy: float
-    timestamp_ms: int
-    acceleration: Optional[float] = None
+class GpsTrack:
+    t: np.ndarray                 # seconds from video start, sorted, unique
+    speed: np.ndarray             # m/s, NaN where invalid
+    course: np.ndarray            # degrees, NaN where invalid
+    lat: np.ndarray
+    lon: np.ndarray
+    accuracy: np.ndarray
+    accel: np.ndarray             # m/s^2, NaN where not computable
+    speed_valid: np.ndarray
+    course_valid: np.ndarray
+    position_valid: np.ndarray
+    stats: dict = field(default_factory=dict)
+
+    def __len__(self) -> int:
+        return len(self.t)
 
 
-@dataclass
-class GpsAlignment:
-    video_id: str
-    split: str
-    gps_records: int
-    gps_duration_sec: float
-    gps_start_offset_sec: float
-    gps_end_gap_sec: float
-    median_interval_sec: float
-    max_interval_sec: float
-    records: list[GpsRecord]
+def _col(df: pd.DataFrame, name: str) -> np.ndarray:
+    if name not in df.columns:
+        return np.full(len(df), np.nan)
+    return pd.to_numeric(df[name], errors="coerce").to_numpy(dtype=float)
 
 
-def parse_gps(json_path: Path) -> dict:
-    """Load a GPS JSON file and return raw metadata + locations list."""
+def load_gps_track(json_path: Path, config: PreprocessConfig) -> GpsTrack:
     with open(json_path, "r", encoding="utf-8") as f:
         meta = json.load(f)
-    locations = meta.get("locations", [])
-    return {
-        "startTime": meta.get("startTime"),
-        "endTime": meta.get("endTime"),
-        "fileName": meta.get("fileName"),
-        "locations": locations,
-    }
+    start = meta.get("startTime")
+    locs = meta.get("locations") or []
+    df = pd.DataFrame(locs)
+    stats = {"gps_records_raw": len(df), "gps_dup_timestamps": 0, "gps_start_time_missing": start is None}
+    if df.empty or start is None or "timestamp" not in df.columns:
+        empty = np.array([], dtype=float)
+        stats.update(gps_records=0, gps_speed_invalid=0, gps_course_invalid=0, gps_position_invalid=0)
+        return GpsTrack(empty, empty, empty, empty, empty, empty, empty,
+                        empty.astype(bool), empty.astype(bool), empty.astype(bool), stats)
 
+    df["timestamp"] = pd.to_numeric(df["timestamp"], errors="coerce")
+    df = df.dropna(subset=["timestamp"]).sort_values("timestamp", kind="stable")
+    n_before = len(df)
+    df = df.drop_duplicates("timestamp", keep="first").reset_index(drop=True)
+    stats["gps_dup_timestamps"] = n_before - len(df)
 
-def build_gps_records(gps_path: Path) -> GpsAlignment:
-    """Parse GPS JSON, compute derived fields, return alignment info."""
-    raw = parse_gps(gps_path)
-    start_time = raw["startTime"]
-    end_time = raw["endTime"]
-    locations = raw["locations"]
+    t = (df["timestamp"].to_numpy(dtype=float) - float(start)) / 1000.0
+    speed, course = _col(df, "speed"), _col(df, "course")
+    lat, lon, acc = _col(df, "latitude"), _col(df, "longitude"), _col(df, "accuracy")
 
-    df = pd.DataFrame(locations)
-    if df.empty:
-        return GpsAlignment(
-            video_id=gps_path.stem, split="",
-            gps_records=0, gps_duration_sec=0.0,
-            gps_start_offset_sec=float("nan"), gps_end_gap_sec=float("nan"),
-            median_interval_sec=float("nan"), max_interval_sec=float("nan"),
-            records=[],
-        )
+    speed_valid = np.isfinite(speed) & (speed >= 0) & (speed <= config.gps_max_speed_m_s)
+    course_valid = np.isfinite(course) & (course >= 0) & (course < 360)
+    position_valid = (np.isfinite(lat) & np.isfinite(lon) & (np.abs(lat) <= 90) & (np.abs(lon) <= 180)
+                      & ~((lat == 0) & (lon == 0)) & ~(np.isfinite(acc) & (acc < 0)))
 
-    df = df.sort_values("timestamp").reset_index(drop=True)
-    ts = df["timestamp"].astype(float).values
+    speed = np.where(speed_valid, speed, np.nan)
+    course = np.where(course_valid, course, np.nan)
+    lat = np.where(position_valid, lat, np.nan)
+    lon = np.where(position_valid, lon, np.nan)
+    acc = np.where(position_valid, acc, np.nan)
 
-    # time relative to video start (seconds)
-    time_seconds = (ts - start_time) / 1000.0
+    accel = np.full(len(t), np.nan)
+    if len(t) > 1:
+        dt = np.diff(t)
+        ok = speed_valid[1:] & speed_valid[:-1] & (dt > 0) & (dt <= config.gps_accel_max_dt_sec)
+        accel[1:][ok] = (speed[1:][ok] - speed[:-1][ok]) / dt[ok]
 
-    speed = df["speed"].astype(float).values
-    speed_kmh = speed * 3.6
-    course = df["course"].astype(float).values
-    heading_sin = np.sin(np.deg2rad(course))
-    heading_cos = np.cos(np.deg2rad(course))
-    latitude = df["latitude"].astype(float).values
-    longitude = df["longitude"].astype(float).values
-    accuracy = df["accuracy"].astype(float).values
-
-    # acceleration using actual timestamp differences
-    dt = np.diff(ts) / 1000.0  # seconds
-    d_speed = np.diff(speed)
-    acceleration = np.full(len(speed), np.nan)
-    valid = dt > 0
-    acceleration[1:][valid] = d_speed[valid] / dt[valid]
-
-    intervals = np.diff(ts) / 1000.0
-    median_interval = float(np.median(intervals)) if len(intervals) else float("nan")
-    max_interval = float(np.max(intervals)) if len(intervals) else float("nan")
-
-    gps_duration = (end_time - start_time) / 1000.0 if (start_time and end_time) else 0.0
-    first_offset = float((ts[0] - start_time) / 1000.0) if start_time else float("nan")
-    last_gap = float((end_time - ts[-1]) / 1000.0) if end_time else float("nan")
-
-    records = []
-    for i in range(len(df)):
-        records.append(GpsRecord(
-            time_seconds=float(time_seconds[i]),
-            speed_m_s=float(speed[i]),
-            speed_kmh=float(speed_kmh[i]),
-            course=float(course[i]),
-            heading_sin=float(heading_sin[i]),
-            heading_cos=float(heading_cos[i]),
-            latitude=float(latitude[i]),
-            longitude=float(longitude[i]),
-            accuracy=float(accuracy[i]),
-            timestamp_ms=int(ts[i]),
-            acceleration=float(acceleration[i]) if not np.isnan(acceleration[i]) else None,
-        ))
-
-    return GpsAlignment(
-        video_id=gps_path.stem, split="",
-        gps_records=len(df), gps_duration_sec=gps_duration,
-        gps_start_offset_sec=first_offset, gps_end_gap_sec=last_gap,
-        median_interval_sec=median_interval, max_interval_sec=max_interval,
-        records=records,
+    stats.update(
+        gps_records=len(t),
+        gps_speed_invalid=int((~speed_valid).sum()),
+        gps_course_invalid=int((~course_valid).sum()),
+        gps_position_invalid=int((~position_valid).sum()),
     )
+    return GpsTrack(t, speed, course, lat, lon, acc, accel,
+                    speed_valid, course_valid, position_valid, stats)
 
 
-def nearest_gps(gps_records: list[GpsRecord], target_t: float,
-                max_gap_sec: float) -> Optional[GpsRecord]:
-    """Return the GPS record nearest to target_t within max_gap_sec, else None."""
-    if not gps_records:
-        return None
-    best = None
-    best_gap = float("inf")
-    for rec in gps_records:
-        gap = abs(rec.time_seconds - target_t)
-        if gap < best_gap:
-            best_gap = gap
-            best = rec
-    if best_gap <= max_gap_sec:
-        return best
-    return None
+def _nearest(t_ref: np.ndarray, targets: np.ndarray) -> np.ndarray:
+    """Index of the nearest element of sorted t_ref for each target."""
+    i = np.searchsorted(t_ref, targets)
+    i = np.clip(i, 1, len(t_ref) - 1) if len(t_ref) > 1 else np.zeros_like(i)
+    if len(t_ref) > 1:
+        left_closer = np.abs(targets - t_ref[i - 1]) <= np.abs(t_ref[i] - targets)
+        i = np.where(left_closer, i - 1, i)
+    return i
+
+
+def interpolate_speed(track: GpsTrack, targets: np.ndarray, max_span: float) -> np.ndarray:
+    out = np.full(len(targets), np.nan)
+    tv, vv = track.t[track.speed_valid], track.speed[track.speed_valid]
+    if len(tv) == 0:
+        return out
+    if len(tv) == 1:
+        out[np.isclose(targets, tv[0])] = vv[0]
+        return out
+    j = np.searchsorted(tv, targets, side="right")          # tv[j-1] <= t < tv[j]
+    inside = (targets >= tv[0]) & (targets <= tv[-1])
+    j = np.clip(j, 1, len(tv) - 1)
+    t0, t1, v0, v1 = tv[j - 1], tv[j], vv[j - 1], vv[j]
+    span = t1 - t0
+    w = np.where(span > 0, (targets - t0) / np.where(span > 0, span, 1), 0.0)
+    val = v0 + w * (v1 - v0)
+    ok = inside & (span <= max_span)
+    out[ok] = val[ok]
+    # exact hit on the last valid record
+    out[np.isclose(targets, tv[-1])] = vv[-1]
+    return out
+
+
+def align_gps(track: GpsTrack, targets: np.ndarray, config: PreprocessConfig) -> pd.DataFrame:
+    """One row per target time with the GPS_COLUMNS."""
+    n = len(targets)
+    df = pd.DataFrame(index=range(n), columns=GPS_COLUMNS, dtype=float)
+    if len(track) == 0:
+        df["gps_matched"] = False
+        for c in ("gps_speed_valid", "gps_course_valid", "gps_position_valid"):
+            df[c] = False
+        return df
+    i = _nearest(track.t, targets)
+    gap = np.abs(track.t[i] - targets)
+    m = gap <= config.gps_assoc_max_gap_sec
+
+    def pick(a):
+        return np.where(m, a[i], np.nan)
+
+    df["gps_matched"] = m
+    df["gps_rec_t_sec"] = np.round(pick(track.t), 4)
+    df["gps_gap_sec"] = np.round(np.where(m, gap, np.nan), 4)
+    sp = pick(track.speed)
+    df["gps_speed_m_s"] = sp
+    df["gps_speed_kmh"] = np.round(sp * 3.6, 4)
+    df["gps_speed_valid"] = m & track.speed_valid[i]
+    df["gps_speed_interp_m_s"] = np.round(interpolate_speed(track, targets, config.gps_interp_max_span_sec), 4)
+    df["gps_accel_m_s2"] = np.round(pick(track.accel), 4)
+    co = pick(track.course)
+    df["gps_course_deg"] = co
+    df["gps_heading_sin"] = np.round(np.sin(np.deg2rad(co)), 6)
+    df["gps_heading_cos"] = np.round(np.cos(np.deg2rad(co)), 6)
+    df["gps_course_valid"] = m & track.course_valid[i]
+    df["gps_lat"] = pick(track.lat)
+    df["gps_lon"] = pick(track.lon)
+    df["gps_accuracy_m"] = pick(track.accuracy)
+    df["gps_position_valid"] = m & track.position_valid[i]
+    return df

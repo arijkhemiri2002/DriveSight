@@ -1,14 +1,28 @@
 """
-Camera and gaze frame extraction with timestamp-based alignment.
+Timestamp-based frame selection with *sequential* decoding.
 
-For each target timestamp t (derived from SAMPLING_FPS), the nearest frame
-is selected by seeking to round(t * fps), reading, and recording the
-actual frame time via cv2.CAP_PROP_POS_MSEC. Temporal residuals are
-recorded so downstream stages can weight/filter by alignment quality.
+Why sequential decoding instead of seeking (CAP_PROP_POS_FRAMES)?
+  * Seeking in H.264 is decoder-dependent: OpenCV jumps to a keyframe and decodes
+    forward, and some streams land on a neighbouring frame without any error.
+  * The old pilot measured the "residual" with CAP_PROP_POS_MSEC, which for
+    constant-frame-rate files is just index/fps, so it could not detect a wrong seek.
+  * BDDA clips are short (~10 s, max 32 s). Decoding every frame once and keeping
+    only the sampled ones is exact by construction (the frame index is a counter)
+    and avoids re-decoding a GOP for every seek.
+
+Sampling plan
+  Target times t_k = k / sampling_fps, kept only while t_k is inside BOTH videos:
+      t_k <= min((n_cam - 1) / fps_cam, (n_gaze - 1) / fps_gaze)
+  This fixes the pilot bug where the last target (t = duration) mapped past the last
+  camera frame and was silently clamped to frame n-1 (residual 0.033 s at 30 fps).
+  Each target maps to the nearest frame: idx = floor(t * fps + 0.5).
+
+Only two decoded frames (one camera, one gaze) are held in memory at a time.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -16,128 +30,111 @@ from typing import Optional
 import cv2
 import numpy as np
 
-from preprocess_config import PreprocessConfig
+
+@dataclass(frozen=True)
+class SamplePoint:
+    sample_idx: int
+    t_sec: float          # target time
+    t_ms: int             # integer key, unique within a sequence
+    cam_idx: int          # nearest camera frame index
+    gaze_idx: int         # nearest gaze frame index
 
 
-@dataclass
-class ExtractedFrame:
-    modality: str          # "camera" or "gaze"
-    video_id: str
-    split: str
-    target_t: float        # requested timestamp (s)
-    frame_index: int       # frame index in source video
-    actual_t: float        # actual frame time (s) from container
-    residual_sec: float    # |actual_t - target_t|
-    width: int
-    height: int
-    path: Path             # output JPEG path
-    ok: bool
+def nearest_index(t: float, fps: float) -> int:
+    """Nearest frame index for time t (round half up, not banker's rounding)."""
+    return int(math.floor(t * fps + 0.5))
 
 
-def target_timestamps(duration_sec: float, sampling_fps: float) -> list[float]:
-    """Generate target timestamps: 0, 1/sampling_fps, 2/... <= duration."""
-    if duration_sec is None or duration_sec <= 0:
+def last_frame_time(n_frames: int, fps: float) -> float:
+    return (n_frames - 1) / fps if n_frames > 0 and fps > 0 else -1.0
+
+
+def sample_plan(cam_frames: int, cam_fps: float, gaze_frames: int, gaze_fps: float,
+                sampling_fps: float) -> list[SamplePoint]:
+    """Target times inside both videos and the frame each one maps to."""
+    t_end = min(last_frame_time(cam_frames, cam_fps),
+                last_frame_time(gaze_frames, gaze_fps))
+    if t_end < 0:
         return []
-    step = 1.0 / sampling_fps
-    n = int(np.floor(duration_sec * sampling_fps)) + 1
-    ts = [i * step for i in range(n)]
-    # keep only those strictly within duration (allow small epsilon)
-    ts = [t for t in ts if t <= duration_sec + 1e-6]
-    return ts
+    plan = []
+    k = 0
+    while True:
+        t = k / sampling_fps
+        if t > t_end + 1e-9:
+            break
+        ci = nearest_index(t, cam_fps)
+        gi = nearest_index(t, gaze_fps)
+        # t <= (n-1)/fps guarantees idx <= n-1; assert to catch manifest errors early
+        assert ci <= cam_frames - 1 and gi <= gaze_frames - 1, (t, ci, gi)
+        plan.append(SamplePoint(k, t, int(round(t * 1000)), ci, gi))
+        k += 1
+    return plan
 
 
-def extract_frame(video_path: Path, modality: str, target_t: float,
-                  fps: float, out_path: Path) -> ExtractedFrame:
-    """Extract the frame nearest to target_t from a video.
+class SequentialReader:
+    """Forward-only frame reader: grab() every frame, retrieve() only requested ones.
 
-    Seeks to round(target_t * fps), reads the frame, and reports the
-    actual container timestamp via CAP_PROP_POS_MSEC.
+    `read_at(idx)` must be called with non-decreasing indices.
     """
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        return _failed(modality, target_t, out_path)
 
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    frame_index = int(round(target_t * fps))
+    def __init__(self, path: Path):
+        self.path = Path(path)
+        self.cap = cv2.VideoCapture(str(self.path))
+        self.pos = -1                      # index of the last grabbed frame
+        self._cache_idx = -1
+        self._cache: Optional[np.ndarray] = None
+        self.last_container_t: float = float("nan")
 
-    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-    ret, frame = cap.read()
-    actual_t = float("nan")
-    residual_sec = float("nan")
-    ok = False
+    @property
+    def opened(self) -> bool:
+        return bool(self.cap.isOpened())
 
-    if ret and frame is not None:
-        actual_msec = cap.get(cv2.CAP_PROP_POS_MSEC)
-        actual_t = actual_msec / 1000.0 if actual_msec > 0 else frame_index / fps
-        residual_sec = abs(actual_t - target_t)
-        ok = True
+    @property
+    def fps(self) -> float:
+        return float(self.cap.get(cv2.CAP_PROP_FPS))
 
-    cap.release()
-    return ExtractedFrame(
-        modality=modality, video_id="", split="", target_t=target_t,
-        frame_index=frame_index, actual_t=actual_t, residual_sec=residual_sec,
-        width=width, height=height, path=out_path, ok=ok,
-    )
+    @property
+    def size(self) -> tuple[int, int]:
+        return (int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
+                int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
 
+    def read_at(self, idx: int) -> Optional[np.ndarray]:
+        if idx < self.pos:
+            raise ValueError(f"SequentialReader is forward-only (asked {idx}, at {self.pos})")
+        if idx == self._cache_idx:
+            return self._cache
+        while self.pos < idx:
+            if not self.cap.grab():
+                return None                       # stream ended before idx
+            self.pos += 1
+        ok, frame = self.cap.retrieve()
+        if not ok or frame is None:
+            return None
+        # container timestamp of the frame just decoded (for drift / VFR detection)
+        self.last_container_t = self.cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+        self._cache_idx, self._cache = idx, frame
+        return frame
 
-def extract_frame_from_capture(cap: cv2.VideoCapture, modality: str,
-                               target_t: float, fps: float,
-                               out_path: Path) -> tuple[Optional[np.ndarray], ExtractedFrame]:
-    """Seek and read one frame from an already-open capture.
+    def count_total_frames(self) -> int:
+        """Grab to the end and return the number of decodable frames."""
+        self._cache, self._cache_idx = None, -1
+        while self.cap.grab():
+            self.pos += 1
+        return self.pos + 1
 
-    Returns (frame_or_None, ExtractedFrame). The caller keeps the capture open.
-    """
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    frame_index = int(round(target_t * fps))
-    # clamp to valid range [0, frame_count-1] to avoid out-of-range seeks
-    if frame_count > 0:
-        frame_index = max(0, min(frame_index, frame_count - 1))
+    def release(self) -> None:
+        self._cache = None
+        self.cap.release()
 
-    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_index)
-    ret, frame = cap.read()
-    actual_t = float("nan")
-    residual_sec = float("nan")
-    ok = False
+    def __enter__(self):
+        return self
 
-    if ret and frame is not None:
-        actual_msec = cap.get(cv2.CAP_PROP_POS_MSEC)
-        actual_t = actual_msec / 1000.0 if actual_msec > 0 else frame_index / fps
-        residual_sec = abs(actual_t - target_t)
-        ok = True
-
-    ef = ExtractedFrame(
-        modality=modality, video_id="", split="", target_t=target_t,
-        frame_index=frame_index, actual_t=actual_t, residual_sec=residual_sec,
-        width=width, height=height, path=out_path, ok=ok,
-    )
-    return (frame if ok else None), ef
+    def __exit__(self, *exc):
+        self.release()
 
 
-def _failed(modality: str, target_t: float, out_path: Path) -> ExtractedFrame:
-    return ExtractedFrame(
-        modality=modality, video_id="", split="", target_t=target_t,
-        frame_index=-1, actual_t=float("nan"), residual_sec=float("nan"),
-        width=0, height=0, path=out_path, ok=False,
-    )
-
-
-def save_frame(frame: np.ndarray, out_path: Path, jpeg_quality: int = 95) -> bool:
-    """Save a BGR frame as JPEG. Returns True on success."""
-    try:
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        ok = cv2.imwrite(str(out_path), frame,
-                         [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality])
-        return bool(ok)
-    except Exception:
-        return False
-
-
-def frame_alignment_ok(residual_sec: Optional[float],
-                       max_err: float) -> bool:
-    """Check whether a frame's temporal residual is within tolerance."""
-    if residual_sec is None or np.isnan(residual_sec):
-        return False
-    return bool(residual_sec <= max_err)
+def seek_read(cap: cv2.VideoCapture, idx: int) -> Optional[np.ndarray]:
+    """Legacy seek-based read used by the pilot (kept only for the accuracy check)."""
+    cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+    ok, frame = cap.read()
+    return frame if ok else None
