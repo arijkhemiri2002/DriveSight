@@ -63,6 +63,17 @@
 #now.hi .why li::before{background:var(--danger)}
 .why li.calm{color:var(--mute)} .why li.calm::before{background:var(--ok)}
 
+/* what the Phase 5 model sees */
+.sees{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:14px;padding-top:12px;border-top:1px solid var(--edge)}
+.sees div{display:flex;flex-direction:column;gap:2px}
+.sees b{font-size:17px;font-weight:750;font-variant-numeric:tabular-nums}
+.sees span{font-size:11px;color:var(--mute);line-height:1.3}
+.sees b.alert{color:var(--danger)}
+.sees .sees-t{grid-column:1/-1;font-size:11px;color:var(--dim);flex-direction:row;justify-content:space-between;align-items:baseline;gap:8px}
+.sees-link{all:unset;color:var(--mute);text-decoration:underline;cursor:pointer;font-size:11px}
+.sees-link:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.app:not(.v5) .sees,.app:not(.v5) .v5only{display:none}
+
 /* drive tab */
 .stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .stat{background:rgba(255,255,255,.05);border:1px solid var(--edge);border-radius:var(--r-sm);padding:10px 12px;text-align:left}
@@ -144,7 +155,7 @@ button.stat{cursor:pointer} button.stat:hover{border-color:var(--accent)}
         <ol class="steps">
           <li id="st-decode"><i></i>Read the video<span></span></li>
           <li id="st-detect"><i></i>Detect road users<span class="num"></span></li>
-          <li id="st-score"><i></i>Score the risk<span></span></li>
+          <li id="st-score"><i></i><em id="st-score-l" style="font-style:normal">Track road users and score the risk</em><span></span></li>
         </ol>
         <div class="pbar"><b id="pb"></b></div>
         <div class="eta num"><span id="pct">0%</span><span id="eta"></span></div>
@@ -165,6 +176,12 @@ button.stat{cursor:pointer} button.stat:hover{border-color:var(--accent)}
       <div><div class="glabel" id="glabel">Low risk</div><div class="gsub num" id="gsub">at 0.0 s</div></div>
     </div>
     <ul class="why" id="why"></ul>
+    <div class="sees" id="sees" aria-label="What the model sees">
+      <div class="sees-t"><span>What the model sees</span><button class="sees-link" type="button" data-ourwork title="How the tracking and the risk model work">How it works</button></div>
+      <div><b class="num" id="s-tracked">0</b><span>road users tracked</span></div>
+      <div><b class="num" id="s-path">0</b><span>in our lane</span></div>
+      <div><b class="num" id="s-ttc">-</b><span>closest contact</span></div>
+    </div>
   </section>
 
   <aside class="hud hud-right glass">
@@ -204,7 +221,7 @@ button.stat{cursor:pointer} button.stat:hover{border-color:var(--accent)}
       <div class="time num"><b id="tcur">0.0 s</b> / <span id="tdur">0.0 s</span></div>
       <div class="seg sm" id="rate" role="group" aria-label="Playback speed"><button type="button" data-r="0.25">0.25×</button><button type="button" data-r="0.5">0.5×</button><button type="button" data-r="1" class="on">1×</button></div>
       <div class="grow"></div>
-      <button class="btn on" id="boxes" type="button" aria-pressed="true" title="Show detected road users">Boxes</button>
+      <button class="btn on" id="boxes" type="button" aria-pressed="true" title="Show detected road users, their tracking number and trail">Boxes</button>
       <button class="btn" id="sound" type="button" aria-pressed="false" title="Beep when an alert starts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 010 7"/></svg>Sound</button>
       <button class="btn" id="hud" type="button" aria-pressed="false" title="Hide the side panels to see the whole video (H)">Hide panels</button>
       <button class="btn" id="csv" type="button">Export CSV</button>
@@ -214,7 +231,7 @@ button.stat{cursor:pointer} button.stat:hover{border-color:var(--accent)}
       <canvas id="tl" aria-label="Risk over time. Click or drag to move; drag the dashed line to change the alarm threshold."></canvas>
       <div id="tip"></div>
     </div>
-    <div class="legend"><span><i style="background:linear-gradient(90deg,#34e0a1,#ffb547,#ff4d6a)"></i>Risk score</span><span><i style="background:rgba(255,77,106,.35)"></i>Alert</span><span><i style="background:#ffb547"></i>Vulnerable road user in view</span><span>Drag the dashed line to set the threshold</span><span id="meta" style="margin-left:auto"></span></div>
+    <div class="legend"><span><i style="background:linear-gradient(90deg,#34e0a1,#ffb547,#ff4d6a)"></i>Risk score</span><span><i style="background:rgba(255,77,106,.35)"></i>Alert</span><span><i style="background:#ffb547"></i>Vulnerable road user in view</span><span class="v5only">#n = the same road user, tracked frame to frame; a red label gives its time to contact</span><span>Drag the dashed line to set the threshold</span><span id="meta" style="margin-left:auto"></span></div>
   </section>
 </div>
 <div class="toast" id="toast" role="alert"></div>
@@ -310,13 +327,14 @@ function show(){
   const maxRisk = Math.max(...d.frames.map(f=>f.risk), d.threshold);
   S.ymax = Math.max(1, Math.ceil(maxRisk*10)/10);
   const sl = $("#thr"); sl.max = S.ymax; S.thr = d.threshold; sl.value = d.threshold; $("#thv").textContent = d.threshold.toFixed(2);
-  $("#thrhint").textContent = d.method === "learned"
+  $("#thrhint").textContent = d.method.startsWith("learned")
     ? "The default is the threshold chosen on the BDDA validation clips (best balance of false alarms and misses)."
     : "The default 0.35 is a demo value: the rule-based score has no labelled data to tune it on.";
   $("#mlabel").textContent = d.label; $("#mnote").textContent = d.note;
   $("#speedbox").style.display = d.uses_speed ? "" : "none"; $("#speed2").value = d.speed_kmh;
   $("#tdur").textContent = fmt(d.duration);
-  $("#meta").textContent = `${d.model}, ${d.frames.length} frames in ${d.wall.toFixed(1)} s`;
+  app.classList.toggle("v5", d.method === "learned-v5");
+  $("#meta").textContent = `${d.model}, ${d.frames.length} frames` + (d.tracking ? `, ${d.tracking.tracks} objects tracked` : "") + ` in ${d.wall.toFixed(1)} s`;
   S.wasHigh = false; $("#garc").setAttribute("d", arc(G.a0, G.a1)); recompute();
   requestAnimationFrame(()=>{ layout(); update(); });
 }
@@ -358,12 +376,35 @@ function recompute(){
   });
 }
 
+const TRAIL = 8;                                  // frames of history drawn behind a tracked object (1.6 s at 5 Hz)
+const closing = d => d.ttc !== undefined && d.ttc < 2.5;
+function drawTrails(f, W, H, lw){
+  const fr = S.data.frames, i = fr.indexOf(f), shown = new Map();
+  f.dets.forEach(d=>{ if(d.id !== undefined && d.conf >= (VRU.has(d.name)?CONF_VRU:CONF_OTHER)) shown.set(d.id, d); });
+  if(!shown.size || i < 1) return;
+  const pts = new Map();
+  for(let j = Math.max(0, i-TRAIL); j <= i; j++) fr[j].dets.forEach(d=>{
+    if(!shown.has(d.id)) return;
+    const [x1,,x2,y2] = d.box; (pts.get(d.id) || pts.set(d.id, []).get(d.id)).push([(x1+x2)/2*W, y2*H]);
+  });
+  pts.forEach((p, id)=>{
+    if(p.length < 2) return;
+    const d = shown.get(id), c = closing(d) ? C.danger : (COLORS[d.name]||"#fff");
+    for(let k = 1; k < p.length; k++){
+      ctx.globalAlpha = 0.15 + 0.75*k/(p.length-1); ctx.strokeStyle = c; ctx.lineWidth = lw*(0.6 + k/(p.length-1));
+      ctx.beginPath(); ctx.moveTo(p[k-1][0], p[k-1][1]); ctx.lineTo(p[k][0], p[k][1]); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  });
+}
 function drawBoxes(f){
   const W = ov.width, H = ov.height; ctx.clearRect(0,0,W,H);
   if(!S.boxes) return;
   const lw = Math.max(2, Math.round(Math.max(W,H)/440)), fs = Math.max(12, Math.round(Math.max(W,H)/92));
+  drawTrails(f, W, H, lw);
   f.dets.filter(d=>d.conf >= (VRU.has(d.name)?CONF_VRU:CONF_OTHER)).forEach(d=>{
-    const [x1,y1,x2,y2] = d.box, x=x1*W, y=y1*H, w=(x2-x1)*W, h=(y2-y1)*H, c = COLORS[d.name]||"#fff", v = VRU.has(d.name);
+    const [x1,y1,x2,y2] = d.box, x=x1*W, y=y1*H, w=(x2-x1)*W, h=(y2-y1)*H, v = VRU.has(d.name);
+    const c = closing(d) ? C.danger : (COLORS[d.name]||"#fff");
     // corner brackets instead of full boxes: lighter, HUD-like
     const L = Math.min(w,h)*0.28, r = Math.min(8, lw*3);
     ctx.lineWidth = v ? lw*1.5 : lw; ctx.strokeStyle = c; ctx.lineCap = "round";
@@ -374,11 +415,12 @@ function drawBoxes(f){
     ctx.moveTo(x+w, y+h-L); ctx.lineTo(x+w, y+h); ctx.lineTo(x+w-L, y+h);
     ctx.moveTo(x+L, y+h); ctx.lineTo(x, y+h); ctx.lineTo(x, y+h-L);
     ctx.stroke(); ctx.shadowBlur = 0;
-    if(v || w*h > W*H*0.004){
+    if(v || w*h > W*H*0.004 || closing(d)){
+      const label = d.name + (d.id !== undefined ? "  #" + d.id : "") + (closing(d) ? "  " + d.ttc.toFixed(1) + " s" : "");
       ctx.font = "650 "+fs+"px Segoe UI Variable Text,Inter,sans-serif";
-      const tw = ctx.measureText(d.name).width+fs*.9, th = fs*1.5, ty = y-th-4<0 ? y+4 : y-th-4;
-      ctx.fillStyle = "rgba(6,10,18,.72)"; ctx.beginPath(); ctx.roundRect(x, ty, tw, th, th/2); ctx.fill();
-      ctx.fillStyle = c; ctx.textBaseline = "middle"; ctx.fillText(d.name, x+fs*.45, ty+th/2+1);
+      const tw = ctx.measureText(label).width+fs*.9, th = fs*1.5, ty = y-th-4<0 ? y+4 : y-th-4;
+      ctx.fillStyle = closing(d) ? "rgba(255,77,106,.9)" : "rgba(6,10,18,.72)"; ctx.beginPath(); ctx.roundRect(x, ty, tw, th, th/2); ctx.fill();
+      ctx.fillStyle = closing(d) ? "#fff" : c; ctx.textBaseline = "middle"; ctx.fillText(label, x+fs*.45, ty+th/2+1);
     }
   });
 }
@@ -403,6 +445,11 @@ function drawGauge(f){
   if(!items.length && f.n_vru) items.push(f.n_vru + " vulnerable road user" + (f.n_vru>1?"s":"") + " in view, not in the path");
   if(!items.length){ const li = document.createElement("li"); li.className = "calm"; li.textContent = "Nothing close ahead"; why.appendChild(li); }
   items.forEach(t=>{ const li = document.createElement("li"); li.textContent = t; why.appendChild(li); });
+  if(f.sees){
+    $("#s-tracked").textContent = f.sees.tracked; $("#s-path").textContent = f.sees.in_path;
+    const t = $("#s-ttc"); t.textContent = f.sees.min_ttc === null ? "none" : f.sees.min_ttc.toFixed(1) + " s";
+    t.classList.toggle("alert", f.sees.min_ttc !== null && f.sees.min_ttc < 2.5);
+  }
   const hi = lv==="hi";
   $("#vig").classList.toggle("on", hi); $("#banner").classList.toggle("on", hi);
   if(hi && !S.wasHigh && !vid.paused) beep();
@@ -525,8 +572,9 @@ document.addEventListener("keydown", e=>{
 $("#rerun").onclick = () => { $("#speed").value = $("#speed2").value; S.file && run(S.file); };
 $("#again").onclick = () => { vid.pause(); fileIn.value = ""; S.data = null; $("#vig").classList.remove("on"); $("#banner").classList.remove("on"); ctx.clearRect(0,0,ov.width,ov.height); vid.removeAttribute("src"); vid.load(); setState("empty"); };
 $("#csv").onclick = () => {
-  const rows = [["time_s","risk","alert","n_vulnerable_road_users","reasons"]].concat(
-    S.data.frames.map(f=>[f.t.toFixed(1), f.risk.toFixed(4), f.risk>=S.thr ? 1 : 0, f.n_vru, '"' + f.reasons.join("; ") + '"']));
+  const rows = [["time_s","risk","alert","n_vulnerable_road_users","road_users_tracked","in_lane","closest_contact_s","reasons"]].concat(
+    S.data.frames.map(f=>[f.t.toFixed(1), f.risk.toFixed(4), f.risk>=S.thr ? 1 : 0, f.n_vru, f.sees ? f.sees.tracked : "",
+      f.sees ? f.sees.in_path : "", f.sees && f.sees.min_ttc !== null ? f.sees.min_ttc : "", '"' + f.reasons.join("; ") + '"']));
   const a = document.createElement("a"); a.download = (S.file?.name || "video").replace(/\.[^.]+$/, "") + "_risk.csv";
   a.href = URL.createObjectURL(new Blob([rows.map(r=>r.join(",")).join("\n")], {type:"text/csv"})); a.click();
 };

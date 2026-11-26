@@ -1,3 +1,7 @@
+> **Remplacé par la phase 5 (`src/fusion/`, voir `docs/phase5_fusion.md`).** Les étapes 2 à 4 ci-dessous utilisent
+> l'ancien format (images JPEG, `detections.csv`) et ne marchent plus avec les phases 2 à 4 d'Arij. Ce dossier reste
+> pour l'historique et pour l'ancien mode de l'application de démo.
+
 # src/risk : modèle d'estimation du risque
 
 Pour chaque image vidéo (5 par seconde), le modèle prédit si le conducteur va **freiner fort dans les 2 secondes**.
