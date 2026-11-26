@@ -1,0 +1,6 @@
+{
+  "cuda": true,
+  "best_half": false,
+  "best_batch": 4,
+  "best_ms_per_frame": 88.87
+}
