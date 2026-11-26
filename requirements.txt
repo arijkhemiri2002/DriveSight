@@ -20,3 +20,7 @@ fastapi==0.129.2
 uvicorn==0.41.0
 python-multipart==0.0.22
 # to open/run the notebook:  jupyterlab (or VS Code with the Jupyter extension)
+# phases 3-5 (parquet files, ByteTrack association) and tests
+pyarrow==26.0.1
+lap==0.5.14
+pytest==9.1.1

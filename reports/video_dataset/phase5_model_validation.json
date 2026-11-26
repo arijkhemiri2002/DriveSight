@@ -1,0 +1,384 @@
+{
+  "metrics": {
+    "rule baseline": {
+      "AP": 0.3622896119590764,
+      "ROC_AUC": 0.6444654549369797,
+      "same_time_AUC": 0.5783193978285354,
+      "F1_at_thr": 0.4668803418803419,
+      "threshold": 0.19830567257592552,
+      "frames": 2803,
+      "positive_rate": 0.25330003567606135,
+      "event_clips": 71,
+      "timely_alarm_rate": 0.19718309859154928,
+      "early_alarm_rate": 0.6901408450704225,
+      "miss_rate": 0.11267605633802817,
+      "median_lead_sec": 3.3,
+      "no_event_clips": 24,
+      "false_alarm_clip_rate": 0.8333333333333334
+    },
+    "logistic": {
+      "AP": 0.4059698009369878,
+      "ROC_AUC": 0.7451323324562761,
+      "same_time_AUC": 0.6945349641638531,
+      "F1_at_thr": 0.546679499518768,
+      "threshold": 0.4573927604180609,
+      "frames": 2803,
+      "positive_rate": 0.25330003567606135,
+      "event_clips": 71,
+      "timely_alarm_rate": 0.1267605633802817,
+      "early_alarm_rate": 0.8732394366197183,
+      "miss_rate": 0.0,
+      "median_lead_sec": 3.9,
+      "no_event_clips": 24,
+      "false_alarm_clip_rate": 0.8333333333333334
+    },
+    "boosting": {
+      "AP": 0.5185399155143728,
+      "ROC_AUC": 0.7897660208744104,
+      "same_time_AUC": 0.7436062553786821,
+      "F1_at_thr": 0.5743048897411314,
+      "threshold": 0.4042323898896126,
+      "frames": 2803,
+      "positive_rate": 0.25330003567606135,
+      "event_clips": 71,
+      "timely_alarm_rate": 0.15492957746478872,
+      "early_alarm_rate": 0.8450704225352113,
+      "miss_rate": 0.0,
+      "median_lead_sec": 3.9,
+      "no_event_clips": 24,
+      "false_alarm_clip_rate": 0.7916666666666666
+    },
+    "vision only": {
+      "AP": 0.3687888396077938,
+      "ROC_AUC": 0.6288688653661098,
+      "same_time_AUC": 0.6280665222196681,
+      "F1_at_thr": 0.4453369031682285,
+      "threshold": 0.4388263259560469,
+      "frames": 2803,
+      "positive_rate": 0.25330003567606135,
+      "event_clips": 71,
+      "timely_alarm_rate": 0.08450704225352113,
+      "early_alarm_rate": 0.8732394366197183,
+      "miss_rate": 0.04225352112676056,
+      "median_lead_sec": 4.1,
+      "no_event_clips": 24,
+      "false_alarm_clip_rate": 1.0
+    },
+    "speed-only": {
+      "AP": 0.3768835727459481,
+      "ROC_AUC": 0.7230382293762575,
+      "same_time_AUC": 0.7300737277193812,
+      "F1_at_thr": 0.5560747663551402,
+      "threshold": 23.508000000000003,
+      "frames": 2803,
+      "positive_rate": 0.25330003567606135,
+      "event_clips": 71,
+      "timely_alarm_rate": 0.14084507042253522,
+      "early_alarm_rate": 0.8028169014084507,
+      "miss_rate": 0.056338028169014086,
+      "median_lead_sec": 4.1,
+      "no_event_clips": 24,
+      "false_alarm_clip_rate": 0.7083333333333334
+    },
+    "time-only": {
+      "AP": 0.5230064048398002,
+      "ROC_AUC": 0.8118214302537634,
+      "same_time_AUC": 0.5,
+      "F1_at_thr": 0.6586102719033232,
+      "threshold": 0.5802453688767738,
+      "frames": 2803,
+      "positive_rate": 0.25330003567606135,
+      "event_clips": 71,
+      "timely_alarm_rate": 0.7323943661971831,
+      "early_alarm_rate": 0.2112676056338028,
+      "miss_rate": 0.056338028169014086,
+      "median_lead_sec": 1.9,
+      "no_event_clips": 24,
+      "false_alarm_clip_rate": 1.0
+    }
+  },
+  "bootstrap": {
+    "rule baseline|AP": [
+      0.2867376999483172,
+      0.4428365607678885
+    ],
+    "rule baseline|stAUC": [
+      0.4779268163178483,
+      0.6819771829300803
+    ],
+    "boosting|AP": [
+      0.4421838217295588,
+      0.5975071673777465
+    ],
+    "boosting|stAUC": [
+      0.6641075762865785,
+      0.8173781238628446
+    ],
+    "vision only|AP": [
+      0.30804590814901095,
+      0.43179902009308463
+    ],
+    "vision only|stAUC": [
+      0.5571265121362351,
+      0.7004885198737877
+    ],
+    "boosting - rule baseline|AP": [
+      0.07676508134395722,
+      0.23821727756628638
+    ],
+    "boosting - rule baseline|stAUC": [
+      0.05584877583232084,
+      0.2788321025468952
+    ],
+    "vision only - rule baseline|AP": [
+      -0.06217233733669573,
+      0.07364733824846074
+    ],
+    "vision only - rule baseline|stAUC": [
+      -0.05280110925883807,
+      0.16114706200704093
+    ]
+  },
+  "ablation": {
+    "objects": {
+      "n_features": 18,
+      "AP": 0.3145432809518578,
+      "same_time_AUC": 0.5926139173942279
+    },
+    "objects + motion (vision)": {
+      "n_features": 28,
+      "AP": 0.3687888396077938,
+      "same_time_AUC": 0.6280665222196681
+    },
+    "vision + attention": {
+      "n_features": 41,
+      "AP": 0.3728485800195024,
+      "same_time_AUC": 0.6352092543590316
+    },
+    "GPS kinematics only": {
+      "n_features": 4,
+      "AP": 0.5524603836418854,
+      "same_time_AUC": 0.740736279091859
+    },
+    "all - attention": {
+      "n_features": 32,
+      "AP": 0.523492661956365,
+      "same_time_AUC": 0.7383685677364118
+    },
+    "all - GPS": {
+      "n_features": 41,
+      "AP": 0.3728485800195024,
+      "same_time_AUC": 0.6352092543590316
+    },
+    "all": {
+      "n_features": 45,
+      "AP": 0.5185399155143728,
+      "same_time_AUC": 0.7436062553786821
+    }
+  },
+  "speed_strata": [
+    {
+      "speed_min_kmh": 0.0,
+      "samples": 2803,
+      "positive_rate": 0.25330003567606135,
+      "rule baseline": 0.5783193978285354,
+      "logistic": 0.6945349641638531,
+      "boosting": 0.7436062553786821,
+      "vision only": 0.6280665222196681,
+      "speed-only": 0.7300737277193812
+    },
+    {
+      "speed_min_kmh": 15.0,
+      "samples": 2149,
+      "positive_rate": 0.3140995812005584,
+      "rule baseline": 0.5718158022574068,
+      "logistic": 0.640239255120751,
+      "boosting": 0.7004401884569456,
+      "vision only": 0.6137908647886999,
+      "speed-only": 0.6807314988280692
+    },
+    {
+      "speed_min_kmh": 25.0,
+      "samples": 1296,
+      "positive_rate": 0.4166666666666667,
+      "rule baseline": 0.5326696118260271,
+      "logistic": 0.46143130518558045,
+      "boosting": 0.6142060389924894,
+      "vision only": 0.5876381984758203,
+      "speed-only": 0.4952073825302727
+    }
+  ],
+  "permutation_importance": {
+    "speed_kmh": 0.21662364084982644,
+    "accel_past": 0.018133198274560947,
+    "lead_scale_rate": 0.01098662212631,
+    "gaze_active_frac": 0.00925121753615965,
+    "max_threat": 0.0059055477883893275,
+    "lead_attention": 0.005765921677313639,
+    "n_traffic_light": 0.004079190964109765,
+    "min_ttc_inpath": 0.0038908507000551262,
+    "n_inpath": 0.0037275374587001364,
+    "lead_age_sec": 0.0022680458818198357,
+    "speed_trend": 0.0017062507215231577,
+    "vru_max_conf": 0.0013774545516279657,
+    "max_scale_rate_near": 0.00074278165794787,
+    "unattended_threat": 0.0007090040598776529,
+    "lead_bottom_rate": 0.0006405850864856418,
+    "gaze_peak_x": 0.0006219770821770387,
+    "gaze_peak_y": 0.0006065998629164829,
+    "vru_scale_rate": 0.00027876910664592636,
+    "vru_near_path": 0.0002690523074383444,
+    "n_vru": 0.0002401901023518412,
+    "lead_is_vru": 8.399813987773157e-05,
+    "gps_valid": 0.0,
+    "vru_present": 0.0,
+    "lead_present": 0.0,
+    "vru_lateral_closing": -6.171907795597213e-05,
+    "vru_ttc_sec": -0.0002283894689088332,
+    "vru_abs_offset": -0.0003713712136613756,
+    "lead_ttc_sec": -0.0005467995947456838,
+    "min_ttc_near": -0.0007410084665357605,
+    "vru_attention": -0.0007507424972587421,
+    "vru_bottom_y": -0.0008111347453889639,
+    "vru_h_n": -0.0008868229689475241,
+    "n_road_users": -0.000948768687342838,
+    "n_vru_near_path": -0.0012234010916376177,
+    "gaze_shift_s": -0.0012977745329157593,
+    "lead_h_n": -0.0013132815794560198,
+    "gaze_n_regions": -0.001339655782800005,
+    "gaze_shift_l": -0.0015655588503708702,
+    "n_vehicle": -0.0017061257899317523,
+    "attended_threat_share": -0.0021166318456729005,
+    "n_new_near_1s": -0.0022163859921614884,
+    "lead_bottom_y": -0.003791605377556665,
+    "gaze_spread": -0.00386322951800618,
+    "gaze_on_road_max": -0.003981790953121345,
+    "gaze_centroid_dist": -0.005505641628700523
+  },
+  "selected": "boosting",
+  "params": {
+    "lr": 0.03,
+    "leaves": 31,
+    "l2": 1.0
+  },
+  "selection_table": [
+    {
+      "kind": "logistic",
+      "C_reg": 0.01,
+      "val_same_time_AUC": 0.6945349641638531,
+      "val_AP": 0.4059698009369878
+    },
+    {
+      "kind": "logistic",
+      "C_reg": 0.1,
+      "val_same_time_AUC": 0.6887444862911302,
+      "val_AP": 0.40571112898243056
+    },
+    {
+      "kind": "logistic",
+      "C_reg": 1.0,
+      "val_same_time_AUC": 0.6877429833544367,
+      "val_AP": 0.4057250261049646
+    },
+    {
+      "kind": "boosting",
+      "lr": 0.03,
+      "leaves": 15,
+      "l2": 0.0,
+      "val_same_time_AUC": 0.7367628255626516,
+      "val_AP": 0.5247192508297864
+    },
+    {
+      "kind": "boosting",
+      "lr": 0.03,
+      "leaves": 15,
+      "l2": 1.0,
+      "val_same_time_AUC": 0.7357834023392593,
+      "val_AP": 0.5144537574444709
+    },
+    {
+      "kind": "boosting",
+      "lr": 0.03,
+      "leaves": 31,
+      "l2": 0.0,
+      "val_same_time_AUC": 0.7419422135202108,
+      "val_AP": 0.522845640732854
+    },
+    {
+      "kind": "boosting",
+      "lr": 0.03,
+      "leaves": 31,
+      "l2": 1.0,
+      "val_same_time_AUC": 0.7436062553786821,
+      "val_AP": 0.5185399155143728
+    },
+    {
+      "kind": "boosting",
+      "lr": 0.1,
+      "leaves": 15,
+      "l2": 0.0,
+      "val_same_time_AUC": 0.7319216701241998,
+      "val_AP": 0.5146996039371602
+    },
+    {
+      "kind": "boosting",
+      "lr": 0.1,
+      "leaves": 15,
+      "l2": 1.0,
+      "val_same_time_AUC": 0.7394119994508741,
+      "val_AP": 0.5080451856551821
+    },
+    {
+      "kind": "boosting",
+      "lr": 0.1,
+      "leaves": 31,
+      "l2": 0.0,
+      "val_same_time_AUC": 0.7288222985191567,
+      "val_AP": 0.5168867276301045
+    },
+    {
+      "kind": "boosting",
+      "lr": 0.1,
+      "leaves": 31,
+      "l2": 1.0,
+      "val_same_time_AUC": 0.7350782226531068,
+      "val_AP": 0.5245821928635062
+    }
+  ],
+  "fusion_hashes": {
+    "training": "830821bcfaec2be4",
+    "validation": "4cc6bea7dea90394"
+  },
+  "models": {
+    "fusion": {
+      "path": "C:\\Users\\Kenza\\Desktop\\DriveSight\\data\\risk\\risk_model_fusion.joblib",
+      "sha256": "9b640db0b68c6e3e9831f9b68e0eadc40c6be3fbe85a9cee9b4ecb4b86dc8a48"
+    },
+    "vision": {
+      "path": "C:\\Users\\Kenza\\Desktop\\DriveSight\\data\\risk\\risk_model_vision_v5.joblib",
+      "sha256": "859e0e1268344cc9ebc47ab5e9a198efacb6e7b00b4beabbe165677e4d71f438"
+    }
+  },
+  "config": {
+    "sampling_fps": 5.0,
+    "hard_brake_decel": 2.0,
+    "min_speed_before_brake": 1.5,
+    "max_gps_interval": 2.5,
+    "horizon_sec": 2.0,
+    "no_event_policy": "negative",
+    "conf_vru": 0.15,
+    "conf_other": 0.25,
+    "path_y_min": 0.45,
+    "path_half_w_top": 0.06,
+    "path_half_w_growth": 0.22,
+    "near_path_margin": 0.1,
+    "motion_lag_sec": 1.0,
+    "motion_lag_tol_sec": 0.4,
+    "ttc_cap_sec": 10.0,
+    "min_box_h_n": 0.02,
+    "gaze_min_sigma": 0.05,
+    "gaze_shift_short_sec": 0.2,
+    "gaze_shift_long_sec": 1.0
+  },
+  "n_bootstrap": 1000
+}

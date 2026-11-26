@@ -1,5 +1,10 @@
 """DriveSight demo app - video risk engine.
 
+Phase 5 (preferred): if data/risk/risk_model_vision_v5.joblib exists (python -m src.fusion.train_risk),
+the video goes through the same chain as BDDA - detection, ByteTrack with the frozen Phase 4 setting,
+Phase 5 object + motion features (src/fusion/live.py) - and is scored by that model.
+Otherwise (older pipeline, kept as a fallback):
+
 Turns a driving video into a per-frame risk timeline, reusing the risk stage in src/risk:
   1. sample the video at 5 fps (same rate as the BDDA preprocessing),
   2. run the selected detector on each sampled frame,
@@ -21,29 +26,50 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src" / "risk"))
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 import risk_config as RC  # noqa: E402
 from build_features import add_temporal, object_features  # noqa: E402
 from rule_baseline import rule_score  # noqa: E402
 
 VISION_MODEL = RC.RISK_DATA_DIR / "risk_model_vision.joblib"
+V5_MODEL = RC.RISK_DATA_DIR / "risk_model_vision_v5.joblib"     # Phase 5 (tracks + fusion features)
 SAMPLE_FPS = RC.SAMPLING_FPS
 RULE_DEFAULT_THRESHOLD = 0.35     # demo setting for the rule score (no labelled data to tune it on); the UI slider overrides it
 _vision_cache: dict = {}
 
 
-def load_vision_model():
-    """Return the learned vision model bundle, or None. Reloaded if the file changes."""
-    if not VISION_MODEL.exists():
+def _load(path: Path):
+    if not path.exists():
         return None
-    mtime = VISION_MODEL.stat().st_mtime
-    if _vision_cache.get("mtime") != mtime:
+    mtime = path.stat().st_mtime
+    c = _vision_cache.setdefault(str(path), {})
+    if c.get("mtime") != mtime:
         import joblib
-        _vision_cache.update(mtime=mtime, bundle=joblib.load(VISION_MODEL))
-    return _vision_cache["bundle"]
+        c.update(mtime=mtime, bundle=joblib.load(path))
+    return c["bundle"]
+
+
+def load_v5_model():
+    """Phase 5 vision model bundle, or None."""
+    return _load(V5_MODEL)
+
+
+def load_vision_model():
+    """Return the older learned vision model bundle, or None. Reloaded if the file changes."""
+    return _load(VISION_MODEL)
 
 
 def method_info() -> dict:
+    v5 = load_v5_model()
+    if v5 is not None:
+        return {"method": "learned-v5", "label": f"Learned model ({v5.get('kind', 'model')}, tracked objects + motion)",
+                "note": f"Phase 5 model trained on BDDA to predict hard braking within {v5.get('horizon_sec', 2.0)} s, "
+                        f"from YOLOv8s detections tracked by ByteTrack. Validation same-time AUC "
+                        f"{v5.get('val_same_time_AUC', float('nan')):.3f} (0.5 = chance). A plain video has no "
+                        "attention map and no GPS, so only the vision part of the model is used.",
+                "threshold": float(v5["threshold"]), "uses_speed": False}
     b = load_vision_model()
     if b is None:
         return {"method": "rule", "label": "Rule-based score",
@@ -189,21 +215,59 @@ def analyse_steps(net, video_path: str, *, device, imgsz, iou, min_conf, class_n
         dets.update(detect_frames(net, frames[i:i + batch], device, imgsz, iou, min_conf, class_names, batch=batch))
         yield {"stage": "detect", "done": min(i + batch, n), "total": n}
     yield {"stage": "score", "done": 0, "total": 1}
-    feats = features_from_detections(dets, meta["width"], meta["height"])
-    feats["risk"] = score(feats, speed_kmh)
+    v5 = load_v5_model()
+    if v5 is not None:
+        from src.fusion.live import reasons as v5_reasons, video_features
+        feats, obj = video_features(dets, meta["width"], meta["height"])
+        feats["time_seconds"] = feats["t_ms"] / 1000.0
+        feats["risk"] = v5["model"].predict_proba(feats[v5["features"]])[:, 1]
+        why = v5_reasons
+        by_ms = {int(round(t * 1000)): t for t in dets}
+        feats["time_seconds"] = [by_ms[int(m)] for m in feats["t_ms"]]
+    else:
+        feats = features_from_detections(dets, meta["width"], meta["height"])
+        feats["risk"] = score(feats, speed_kmh)
+        why = reasons
+        obj = None
+    # per tracked box: track id, in the ego path, contact-time proxy (Phase 5 only)
+    track_info = {}
+    if obj is not None and len(obj):
+        for r in obj.itertuples(index=False):
+            ttc = float(r.ttc_sec) if np.isfinite(r.ttc_sec) and r.ttc_sec < 9.99 else None
+            track_info[(int(r.t_ms), int(r.det_idx))] = (int(r.track_id), bool(r.in_path), ttc)
     W, H = meta["width"], meta["height"]
     out_frames = []
     for _, row in feats.iterrows():
         t = row["time_seconds"]
-        d = dets[t]
-        d = d[d["conf"] >= min(RC.CONF_VRU, RC.CONF_OTHER)]          # the page never draws anything below this
-        boxes = [{"name": c, "conf": round(float(s), 4),
-                  "box": [round(x1 / W, 5), round(y1 / H, 5), round(x2 / W, 5), round(y2 / H, 5)]}
-                 for c, s, x1, y1, x2, y2 in zip(d["cls"], d["conf"], d["x1"], d["y1"], d["x2"], d["y2"])]
-        out_frames.append({"t": float(t), "risk": round(float(row["risk"]), 4), "dets": boxes,
-                           "n_vru": int(row["n_vru"]), "reasons": reasons(row)})
+        # same order as src/fusion/live.boxes_table (confidence, descending), so det_idx matches the tracks
+        d = dets[t].sort_values("conf", ascending=False).reset_index(drop=True)
+        t_ms = int(round(t * 1000))
+        boxes = []
+        for i, (c, s, x1, y1, x2, y2) in enumerate(zip(d["cls"], d["conf"], d["x1"], d["y1"], d["x2"], d["y2"])):
+            if s < min(RC.CONF_VRU, RC.CONF_OTHER):                    # the page never draws anything below this
+                continue
+            b = {"name": c, "conf": round(float(s), 4),
+                 "box": [round(x1 / W, 5), round(y1 / H, 5), round(x2 / W, 5), round(y2 / H, 5)]}
+            ti = track_info.get((t_ms, i))
+            if ti:
+                b["id"], b["inpath"] = ti[0], ti[1]
+                if ti[2] is not None:
+                    b["ttc"] = round(ti[2], 2)
+            boxes.append(b)
+        fr = {"t": float(t), "risk": round(float(row["risk"]), 4), "dets": boxes,
+              "n_vru": int(row["n_vru"]), "reasons": why(row)}
+        if obj is not None:                                            # what the Phase 5 model sees
+            ttc = row.get("min_ttc_near", np.nan)
+            fr["sees"] = {"tracked": int(row.get("n_road_users", 0)), "in_path": int(row.get("n_inpath", 0)),
+                          "vru_near": int(row.get("n_vru_near_path", 0)),
+                          "min_ttc": round(float(ttc), 2) if np.isfinite(ttc) and ttc < 9.99 else None}
+        out_frames.append(fr)
+    tracking = None
+    if obj is not None and len(obj):
+        lens = obj.groupby("track_id")["t_ms"].count()
+        tracking = {"tracks": int(lens.size), "median_len_sec": round(float(lens.median()) / SAMPLE_FPS, 1)}
     yield {"result": {**method_info(), "sample_fps": SAMPLE_FPS, "duration": meta["duration"], "width": W, "height": H,
-                      "speed_kmh": speed_kmh, "frames": out_frames}}
+                      "speed_kmh": speed_kmh, "frames": out_frames, "tracking": tracking}}
 
 
 def analyse(net, video_path: str, **kw):
