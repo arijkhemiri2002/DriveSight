@@ -54,3 +54,4 @@ predictions*.json
 predictions_*.pkl
 *.pkl
 .pytest_cache/
+reports/video_dataset/*_console_*.txt
